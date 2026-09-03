@@ -1,0 +1,11 @@
+groups:
+  - name: http-server-projeto-korp-alerts
+    rules:
+      - alert: ServiceDown
+        expr: up{job="http-server-projeto-korp"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Instância http-server-projeto-korp indisponível"
+          description: "O endpoint de métricas (/metrics) de {{ $labels.instance }} não responde há mais de 1 minuto. Ações recomendadas: 1. Inspecionar logs do container (docker compose logs http-server-projeto-korp). 2. Verificar integridade da rede docker bridge (korp-network). 3. Testar conectividade do endpoint /healthz."

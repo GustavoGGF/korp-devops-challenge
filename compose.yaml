@@ -3,34 +3,79 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    expose:
-      - "8080"
+    container_name: http-server-projeto-korp
+    ports:
+      - "8080:8080"
     networks:
       - korp-network
+    restart: unless-stopped
     healthcheck:
-      test:
-        - CMD
-        - wget
-        - --spider
-        - --quiet
-        - http://127.0.0.1:8080/projeto-korp
-      interval: 5s
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/healthz || exit 1"]
+      interval: 10s
       timeout: 3s
-      retries: 5
+      retries: 3
       start_period: 5s
 
-  nginx:
-    image: nginx:1.27-alpine
+  prometheus:
+    image: prom/prometheus:v3.2.1
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.enable-lifecycle"
+    volumes:
+      - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deploy/prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus-data:/prometheus
+    networks:
+      - korp-network
+    restart: unless-stopped
     depends_on:
       http-server-projeto-korp:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9090/-/ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  grafana:
+    image: grafana/grafana:11.5.2
+    container_name: grafana
     ports:
-      - "80:80"
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
-      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./deploy/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./deploy/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./deploy/grafana/dashboards:/etc/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
     networks:
       - korp-network
+    restart: unless-stopped
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
 
 networks:
   korp-network:
+    name: korp-network
     driver: bridge
+
+volumes:
+  prometheus-data:
+    name: korp-prometheus-data
+  grafana-data:
+    name: korp-grafana-data
