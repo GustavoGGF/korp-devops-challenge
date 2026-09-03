@@ -1,5 +1,5 @@
 # Estágio de compilação (Builder)
-FROM golang:alpine AS builder
+FROM golang:1.24-alpine AS builder
 
 WORKDIR /build
 
@@ -15,7 +15,7 @@ COPY internal/ ./internal/
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /app/http-server-projeto-korp ./cmd/http-server-projeto-korp
 
 # Estágio de execução (Runtime)
-FROM alpine:latest
+FROM alpine:3.21
 
 # Instala ca-certificates e tzdata, e configura usuário não-root
 RUN apk --no-cache add ca-certificates tzdata && \

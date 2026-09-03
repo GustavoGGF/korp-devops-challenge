@@ -157,11 +157,89 @@ docker run --rm -v "$(pwd)/deploy/prometheus:/etc/prometheus:ro" --entrypoint /b
 ```bash
 docker compose config
 ```
-
+ 
 ---
+ 
+## 7. Orquestração Multi-Container com Docker Compose e NGINX Reverse Proxy
+ 
+O ambiente completo de produção simulada opera com dois containers orquestrados via `compose.yaml`:
+ 
+1. **`http-server-projeto-korp`**: Aplicação HTTP Go escutando internamente na porta `8080`.
+2. **`nginx`**: Servidor NGINX oficial (`nginx:1.27-alpine`) atuando como proxy reverso e borda, escutando e publicando a porta `80` para o host.
+ 
+### Arquitetura de Comunicação e Rede
+ 
+```text
+[ Cliente ]
+    │ (http://localhost:80/projeto-korp)
+    ▼
+[ NGINX :80 ] (ponto único de entrada publicado no host)
+    │
+    │ Rede privada Docker bridge (korp-network)
+    │ Resolução DNS interna: http://http-server-projeto-korp:8080
+    ▼
+[ http-server-projeto-korp :8080 ] (porta interna isolada, sem bind no host)
+```
+ 
+- **Isolamento de Rede**: A aplicação Go **não** possui a diretiva `ports` no Compose, tornando a porta `8080` inacessível a partir da máquina host. Toda comunicação externa deve passar obrigatoriamente pelo proxy NGINX.
+- **Resiliência e Healthcheck**: O NGINX depende da integridade da aplicação (`depends_on` com `condition: service_healthy`). O healthcheck executa periodicamente `wget --spider --quiet http://127.0.0.1:8080/projeto-korp`.
+- **Configuração NGINX Declarativa**: As diretivas de proxy estão em `nginx/conf.d/http-server-projeto-korp.conf`, montadas em modo somente leitura (`:ro`) no container NGINX.
+ 
+### Comandos de Operação
+ 
+#### Iniciar o ambiente com build em segundo plano
+ 
+```bash
+docker compose up -d --build
+```
+ 
+#### Verificar o status dos serviços e healthcheck
+ 
+```bash
+docker compose ps
+```
+ 
+Saída esperada:
+```text
+NAME                                               IMAGE                                            STATUS                    PORTS
+korp-devops-challenge-http-server-projeto-korp-1   korp-devops-challenge-http-server-projeto-korp   Up (healthy)              8080/tcp
+korp-devops-challenge-nginx-1                      nginx:1.27-alpine                                Up                        0.0.0.0:80->80/tcp
+```
+ 
+#### Testar a configuração do NGINX dentro do container
+ 
+```bash
+docker compose exec nginx nginx -t
+```
+ 
+#### Smoke test oficial (porta 80)
+ 
+```bash
+curl -i http://localhost:80/projeto-korp
+```
+ 
+Exemplo de resposta:
+```http
+HTTP/1.1 200 OK
+Server: nginx/1.27.5
+Content-Type: application/json
 
 ## 6. Estrutura do Projeto
 
+# Apenas o servidor Go
+docker compose logs -f http-server-projeto-korp
+```
+ 
+#### Encerrar o ambiente
+ 
+```bash
+docker compose down
+```
+ 
+---
+ 
+## 8. Estrutura do Projeto
+ 
 ```text
 .
 ├── cmd/
@@ -195,7 +273,7 @@ docker compose config
 ├── PLANO_IMPLEMENTACAO_MONITORAMENTO_OBSERVABILIDADE.md # Especificação da Parte 2
 └── README.md                        # Documentação da stack e guia operacional
 ```
-
+ 
 ---
 
 ## 7. Roteiro de Validação e Resolução de Problemas (Troubleshooting)
@@ -257,17 +335,17 @@ docker compose config
 ## 8. Agentes e Skills do Projeto
 
 As instruções locais para agentes ficam em `.agents/`. O ambiente esperado para a evolução do desafio inclui Docker, Docker Compose, Go, Ansible e Git.
-
+ 
 Agentes especializados:
-
+ 
 - `container-agent`: Docker, Docker Compose e redes Docker.
 - `reverse-proxy-agent`: NGINX como proxy reverso.
 - `observability-agent`: Prometheus, Grafana, alertas e provisioning.
 - `infrastructure-agent`: Ansible, Linux/Shell e YAML de infraestrutura.
 - `go-http-agent`: servidores HTTP e APIs em Go.
-
+ 
 Skills disponíveis em `.agents/skills/`:
-
+ 
 `go-http-server`, `docker`, `docker-compose`, `docker-networking`, `nginx-reverse-proxy`, `prometheus`, `grafana`, `observability`, `grafana-provisioning`, `ansible`, `linux-shell` e `yaml-infrastructure`.
 
 As skills de infraestrutura foram criadas localmente após a verificação nominal da página [skills.sh/trending](https://www.skills.sh/trending), que não listava essas áreas no momento da configuração. CI/CD não foi adicionado porque permanece condicional no plano do desafio.
