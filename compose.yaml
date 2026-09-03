@@ -1,0 +1,36 @@
+services:
+  http-server-projeto-korp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    expose:
+      - "8080"
+    networks:
+      - korp-network
+    healthcheck:
+      test:
+        - CMD
+        - wget
+        - --spider
+        - --quiet
+        - http://127.0.0.1:8080/projeto-korp
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  nginx:
+    image: nginx:1.27-alpine
+    depends_on:
+      http-server-projeto-korp:
+        condition: service_healthy
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+    networks:
+      - korp-network
+
+networks:
+  korp-network:
+    driver: bridge

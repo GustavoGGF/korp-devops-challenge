@@ -45,6 +45,7 @@ Serviço HTTP em Go desenvolvido como parte do desafio técnico Korp DevOps. O s
 
 - [Go](https://golang.org/dl/) 1.24 ou superior (para execução e testes locais).
 - [Docker](https://docs.docker.com/get-docker/) (para compilação e execução via container).
+- [Docker Compose](https://docs.docker.com/compose/) v2 ou superior (para orquestração multi-container e proxy reverso).
 - `curl` (para testes de requisição via terminal).
 
 ---
@@ -133,88 +134,183 @@ curl -i http://localhost:8080/rota-invalida
 ```bash
 docker stop http-server-projeto-korp && docker rm http-server-projeto-korp
 ```
-
+ 
 ---
+ 
+## 7. Orquestração Multi-Container com Docker Compose e NGINX Reverse Proxy
+ 
+O ambiente completo de produção simulada opera com dois containers orquestrados via `compose.yaml`:
+ 
+1. **`http-server-projeto-korp`**: Aplicação HTTP Go escutando internamente na porta `8080`.
+2. **`nginx`**: Servidor NGINX oficial (`nginx:1.27-alpine`) atuando como proxy reverso e borda, escutando e publicando a porta `80` para o host.
+ 
+### Arquitetura de Comunicação e Rede
+ 
+```text
+[ Cliente ]
+    │ (http://localhost:80/projeto-korp)
+    ▼
+[ NGINX :80 ] (ponto único de entrada publicado no host)
+    │
+    │ Rede privada Docker bridge (korp-network)
+    │ Resolução DNS interna: http://http-server-projeto-korp:8080
+    ▼
+[ http-server-projeto-korp :8080 ] (porta interna isolada, sem bind no host)
+```
+ 
+- **Isolamento de Rede**: A aplicação Go **não** possui a diretiva `ports` no Compose, tornando a porta `8080` inacessível a partir da máquina host. Toda comunicação externa deve passar obrigatoriamente pelo proxy NGINX.
+- **Resiliência e Healthcheck**: O NGINX depende da integridade da aplicação (`depends_on` com `condition: service_healthy`). O healthcheck executa periodicamente `wget --spider --quiet http://127.0.0.1:8080/projeto-korp`.
+- **Configuração NGINX Declarativa**: As diretivas de proxy estão em `nginx/conf.d/http-server-projeto-korp.conf`, montadas em modo somente leitura (`:ro`) no container NGINX.
+ 
+### Comandos de Operação
+ 
+#### Iniciar o ambiente com build em segundo plano
+ 
+```bash
+docker compose up -d --build
+```
+ 
+#### Verificar o status dos serviços e healthcheck
+ 
+```bash
+docker compose ps
+```
+ 
+Saída esperada:
+```text
+NAME                                               IMAGE                                            STATUS                    PORTS
+korp-devops-challenge-http-server-projeto-korp-1   korp-devops-challenge-http-server-projeto-korp   Up (healthy)              8080/tcp
+korp-devops-challenge-nginx-1                      nginx:1.27-alpine                                Up                        0.0.0.0:80->80/tcp
+```
+ 
+#### Testar a configuração do NGINX dentro do container
+ 
+```bash
+docker compose exec nginx nginx -t
+```
+ 
+#### Smoke test oficial (porta 80)
+ 
+```bash
+curl -i http://localhost:80/projeto-korp
+```
+ 
+Exemplo de resposta:
+```http
+HTTP/1.1 200 OK
+Server: nginx/1.27.5
+Content-Type: application/json
 
-## 7. Estrutura do Projeto
+{"nome":"Projeto Korp","horario":"2026-09-03T14:46:52Z"}
+```
+ 
+#### Validar isolamento da aplicação (porta 8080 não deve responder no host)
+ 
+```bash
+curl -i http://localhost:8080/projeto-korp
+# Esperado: Falha de conexão (porta 8080 recusada no host)
+```
+ 
+#### Acompanhar logs dos containers
+ 
+```bash
+# Todos os serviços
+docker compose logs -f
 
+# Apenas o proxy NGINX
+docker compose logs -f nginx
+
+# Apenas o servidor Go
+docker compose logs -f http-server-projeto-korp
+```
+ 
+#### Encerrar o ambiente
+ 
+```bash
+docker compose down
+```
+ 
+---
+ 
+## 8. Estrutura do Projeto
+ 
 ```text
 .
 ├── cmd/
 │   └── http-server-projeto-korp/
-│       └── main.go                  # Ponto de entrada, configuração do servidor e graceful shutdown
+│       └── main.go                         # Ponto de entrada, configuração do servidor e graceful shutdown
 ├── internal/
 │   └── transport/
 │       └── http/
-│           └── handler.go           # Roteamento e handlers HTTP do endpoint /projeto-korp
+│           └── handler.go                  # Roteamento e handlers HTTP do endpoint /projeto-korp
+├── nginx/
+│   └── conf.d/
+│       └── http-server-projeto-korp.conf   # Configuração do proxy reverso NGINX e headers defensivos
 ├── tests/
 │   └── unit/
 │       └── internal/transport/http/
-│           └── handler_test.go      # Testes unitários automatizados do contrato HTTP
-├── Dockerfile                       # Build multi-stage e runtime seguro em Alpine
-├── .dockerignore                    # Exclusão de arquivos desnecessários no build da imagem
-├── go.mod                           # Definição do módulo Go
-├── PLANO_IMPLEMENTACAO_HTTP_SERVER.md # Plano de especificação original
-└── README.md                        # Documentação do serviço
+│           └── handler_test.go             # Testes unitários automatizados do contrato HTTP
+├── .dockerignore                           # Exclusão de arquivos desnecessários no build da imagem
+├── .gitignore                              # Exclusões do versionamento Git
+├── Dockerfile                              # Build multi-stage (golang:1.24-alpine) e runtime seguro (alpine:3.21)
+├── compose.yaml                            # Orquestração Compose (Go Server + NGINX + rede bridge korp-network)
+├── go.mod                                  # Definição do módulo Go
+├── PLANO_IMPLEMENTACAO_HTTP_SERVER.md      # Plano de especificação da aplicação HTTP Go
+├── PLANO_IMPLEMENTACAO_DOCKER_COMPOSE_NGINX.md # Plano de especificação da orquestração e proxy reverso
+└── README.md                               # Documentação técnica e operacional do projeto
 ```
-
+ 
 ---
-
-## 8. Detalhes de Segurança e Operação
-
-- **Build Multi-stage**: A compilação é isolada no estágio `builder` (`golang:alpine`), produzindo um binário estático sem dependências de CGO (`CGO_ENABLED=0`).
-- **Imagem de Runtime Mínima**: Utiliza `alpine:latest` contendo apenas os certificados raiz de AC (`ca-certificates`) e dados de fuso (`tzdata`).
-- **Usuário Não-Root**: O container executa sob o usuário não-privilegiado `appuser` (UID 10001).
-- **Timeouts Defensivos**:
-  - `ReadHeaderTimeout`: 5 segundos
-  - `ReadTimeout`: 10 segundos
-  - `WriteTimeout`: 10 segundos
-  - `IdleTimeout`: 60 segundos
-- **Graceful Shutdown**: Intercepta sinais `SIGINT` e `SIGTERM`, fornecendo um período de tolerância de 5 segundos para drenagem de conexões ativas.
-
+ 
+## 9. Detalhes de Segurança e Operação
+ 
+- **Build Multi-stage e Imagens Versionadas**: A compilação é isolada no estágio `builder` (`golang:1.24-alpine`), gerando um binário estático (`CGO_ENABLED=0`) com símbolos removidos (`-s -w`). O runtime utiliza imagem mínima e controlada (`alpine:3.21`).
+- **Mínimo Privilégio**: O container da aplicação Go executa sob o usuário não-privilegiado `appuser` (UID 10001).
+- **Volume NGINX Somente Leitura**: A pasta de configuração `./nginx/conf.d` é montada como bind read-only (`:ro`), impedindo qualquer modificação no sistema de arquivos do NGINX em tempo de execução.
+- **Timeouts Defensivos em Dupla Camada**:
+  - **NGINX**: Conexão upstream em 5s (`proxy_connect_timeout`), leitura em 10s (`proxy_read_timeout`), escrita em 10s (`proxy_send_timeout`).
+  - **Go HTTP Server**: `ReadHeaderTimeout` 5s, `ReadTimeout` 10s, `WriteTimeout` 10s, `IdleTimeout` 60s.
+- **Graceful Shutdown**: Intercepta sinais `SIGINT` e `SIGTERM`, fornecendo 5 segundos para encerramento gracioso e drenagem de conexões ativas.
+ 
 ---
-
-## 9. Resolução de Problemas (Troubleshooting)
-
-### Porta 8080 já está em uso
-
-Se a porta `8080` já estiver ocupada por outro processo na máquina host:
-
+ 
+## 10. Resolução de Problemas (Troubleshooting)
+ 
+### Porta 80 ou 8080 já está em uso na máquina host
+ 
 1. **Identificar o processo em conflito**:
    ```bash
-   lsof -i :8080
+   lsof -i :80
    # ou
-   ss -tulpn | grep 8080
+   ss -tulpn | grep -E ':(80|8080)\b'
    ```
-
-2. **Alterar a porta na execução local**:
+ 
+2. **Alterar a porta na execução local do binário Go**:
    ```bash
    PORT=8081 go run ./cmd/http-server-projeto-korp
    curl -i http://localhost:8081/projeto-korp
    ```
-
+ 
+3. **Alterar a porta mapeada no container isolado**:
+   ```bash
+   docker run -d --name http-server-projeto-korp -p 8081:8080 http-server-projeto-korp:local
+   curl -i http://localhost:8081/projeto-korp
+   ```
+ 
 ---
-
-## 10. Agentes e skills do projeto
-
+ 
+## 11. Agentes e skills do projeto
+ 
 As instruções locais para agentes ficam em `.agents/`. O ambiente esperado para a evolução do desafio inclui Docker, Docker Compose, Go, Ansible e Git.
-
+ 
 Agentes especializados:
-
+ 
 - `container-agent`: Docker, Docker Compose e redes Docker.
 - `reverse-proxy-agent`: NGINX como proxy reverso.
 - `observability-agent`: Prometheus, Grafana, alertas e provisioning.
 - `infrastructure-agent`: Ansible, Linux/Shell e YAML de infraestrutura.
 - `go-http-agent`: servidores HTTP e APIs em Go.
-
+ 
 Skills disponíveis em `.agents/skills/`:
-
+ 
 `go-http-server`, `docker`, `docker-compose`, `docker-networking`, `nginx-reverse-proxy`, `prometheus`, `grafana`, `observability`, `grafana-provisioning`, `ansible`, `linux-shell` e `yaml-infrastructure`.
-
-As skills de infraestrutura foram criadas localmente após a verificação nominal da página [skills.sh/trending](https://www.skills.sh/trending), que não listava essas áreas no momento da configuração. CI/CD não foi adicionado porque permanece condicional no plano do desafio.
-
-3. **Alterar a porta mapeada no Docker**:
-   ```bash
-   docker run -d --name http-server-projeto-korp -p 8081:8080 http-server-projeto-korp:local
-   curl -i http://localhost:8081/projeto-korp
-   ```
