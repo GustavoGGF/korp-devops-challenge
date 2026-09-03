@@ -1,34 +1,50 @@
 # http-server-projeto-korp
 
-Serviço HTTP em Go desenvolvido como parte do desafio técnico Korp DevOps. O serviço expõe o endpoint `/projeto-korp` retornando informações em JSON com o horário atual calculado dinamicamente em UTC no formato RFC 3339.
+Serviço HTTP em Go desenvolvido como parte do desafio técnico Korp DevOps. O serviço expõe o endpoint de negócio `/projeto-korp`, endpoints operacionais de observabilidade (`/healthz` e `/metrics`), coleta automatizada via **Prometheus** e visualização em dashboard declarativo via **Grafana**, orquestrados via **Docker Compose**.
 
 ---
 
-## 1. Visão Geral
+## 1. Visão Geral e Arquitetura
 
-- **Linguagem**: Go (1.24+) utilizando a biblioteca padrão `net/http`.
-- **Porta padrão**: `8080` (configurável via variável de ambiente `PORT`).
+- **Linguagem**: Go (1.24+) utilizando a biblioteca padrão `net/http` e cliente Prometheus oficial (`github.com/prometheus/client_golang`).
+- **Porta padrão da aplicação**: `8080` (configurável via variável de ambiente `PORT`).
 - **Conteinerização**: Docker com build multi-stage, binário estático e usuário não-root para segurança.
-- **Robustez operacional**: Timeouts defensivos de conexão e *graceful shutdown* com propagação de contexto.
+- **Robustez operacional**: Timeouts defensivos de conexão, *graceful shutdown* com propagação de contexto e registry isolado de telemetria.
+- **Observabilidade**:
+  - Métricas expostas em `/metrics` no formato Prometheus;
+  - Coleta automática pelo Prometheus (`job: http-server-projeto-korp`) a cada 5s;
+  - Regra de alerta declarativa `ServiceDown` para detecção de indisponibilidade;
+  - Provisionamento automatizado de fonte de dados e dashboard no Grafana.
+
+### Topologia dos Serviços (Docker Compose)
+
+```text
+Host:8080 ---------------> http-server-projeto-korp:8080
+                                 │ (/metrics)
+                                 ▼ (scrape a cada 5s)
+Host:9090 ---------------> prometheus:9090
+                                 │ (datasource proxy)
+                                 ▼
+Host:3000 ---------------> grafana:3000 (dashboard provisionado)
+```
 
 ---
 
-## 2. Contrato HTTP
+## 2. Contratos HTTP
 
-### Endpoint: `GET /projeto-korp`
+### 2.1 Endpoint de Negócio: `GET /projeto-korp`
 
 | Item | Definição |
 |---|---|
 | **Método** | `GET` |
 | **Rota** | `/projeto-korp` |
-| **Corpo da requisição** | Vazio |
+| **Corpo** | Vazio |
 | **Status de sucesso** | `200 OK` |
 | **Content-Type** | `application/json` |
-| **Outros métodos** | `405 Method Not Allowed` |
+| **Outros métodos** | `405 Method Not Allowed` (`Allow: GET`) |
 | **Rotas não mapeadas** | `404 Not Found` |
 
-#### Formato da Resposta (200 OK)
-
+#### Resposta de Exemplo (200 OK)
 ```json
 {
   "nome": "Projeto Korp",
@@ -36,166 +52,209 @@ Serviço HTTP em Go desenvolvido como parte do desafio técnico Korp DevOps. O s
 }
 ```
 
-- `nome`: String fixa `"Projeto Korp"`.
-- `horario`: Timestamp em UTC gerado dinamicamente a cada requisição, em conformidade com a norma RFC 3339 (sufixo `Z`).
+---
+
+### 2.2 Endpoint de Prontidão: `GET /healthz`
+
+Endpoint leve e sem efeitos colaterais para sondas de liveness/readiness (healthcheck do Docker e orquestradores).
+
+| Item | Definição |
+|---|---|
+| **Método** | `GET` |
+| **Rota** | `/healthz` |
+| **Status de sucesso** | `200 OK` |
+| **Content-Type** | `application/json` |
+| **Resposta** | `{"status":"ok"}` |
+| **Outros métodos** | `405 Method Not Allowed` |
 
 ---
 
-## 3. Pré-requisitos
+### 2.3 Endpoint de Métricas: `GET /metrics`
 
-- [Go](https://golang.org/dl/) 1.24 ou superior (para execução e testes locais).
-- [Docker](https://docs.docker.com/get-docker/) (para compilação e execução via container).
-- `curl` (para testes de requisição via terminal).
+Expõe métricas no formato padrão de texto do Prometheus:
 
----
-
-## 4. Execução Local com Go
-
-### Iniciar o servidor
-
-```bash
-go run ./cmd/http-server-projeto-korp
-```
-
-Para executar em uma porta diferente:
-
-```bash
-PORT=9090 go run ./cmd/http-server-projeto-korp
-```
-
-### Testar a requisição
-
-```bash
-curl -i http://localhost:8080/projeto-korp
-```
-
-Exemplo de resposta:
-
-```http
-HTTP/1.1 200 OK
-Content-Type: application/json
-Date: Thu, 03 Sep 2026 13:35:00 GMT
-Content-Length: 57
-
-{"nome":"Projeto Korp","horario":"2026-09-03T13:35:00Z"}
-```
+- `http_requests_total{method, route, status}`: Contador particionado por método HTTP, rota normalizada (`/projeto-korp`, `/healthz` ou `not_found`) e status code.
+- *Nota de design*: O endpoint `/metrics` é deliberadamente excluído de `http_requests_total` para que coletas periódicas não inflem o tráfego de negócio. A disponibilidade da coleta é monitorada via `up{job="http-server-projeto-korp"}`.
+- Métricas padrão do runtime Go (`go_goroutines`, `go_memstats_*`) e de processo (`process_cpu_seconds_total`, etc.).
 
 ---
 
-## 5. Testes Automatizados
+## 3. Orquestração Multi-Container (Docker Compose)
 
-A aplicação segue práticas rigorosas de TDD e separação de responsabilidades. Os testes unitários cobrem contrato de resposta, cabeçalhos, integridade do formato UTC/RFC 3339, geração dinâmica de horário, rejeição de métodos inválidos e tratamento de rotas inexistentes.
+O ambiente completo de aplicação e observabilidade é orquestrado via `compose.yaml`.
 
-Para executar os testes com detecção de concorrência (*race detector*):
+### Subir o ambiente
+
+```bash
+docker compose up --build -d
+```
+
+### Serviços expostos
+
+| Serviço | Porta Host | URL de Acesso | Descrição |
+|---|---|---|---|
+| `http-server-projeto-korp` | `8080` | `http://localhost:8080` | Aplicação Go |
+| `prometheus` | `9090` | `http://localhost:9090` | Servidor Prometheus v3.2.1 |
+| `grafana` | `3000` | `http://localhost:3000` | Painéis Grafana v11.5.2 (user: `admin`, pass: `admin`) |
+
+### Verificar estado dos containers
+
+```bash
+docker compose ps
+```
+
+### Encerrar o ambiente
+
+```bash
+docker compose down
+```
+
+Para remover também os volumes persistentes (`prometheus-data` e `grafana-data`):
+
+```bash
+docker compose down -v
+```
+
+---
+
+## 4. Visualização e Dashboards no Grafana
+
+O Grafana inicia pré-configurado com a fonte de dados Prometheus e o dashboard operacional:
+
+- **Dashboard**: `HTTP Server Projeto Korp — Observabilidade` (UID: `http-server-projeto-korp-dash`)
+- **Painéis**:
+  1. **Disponibilidade do Serviço (`up`)**: Indicação clara de saúde (`ONLINE`, `OFFLINE` ou `SEM DADOS`);
+  2. **Volume Total de Requisições (RPS)**: Taxa agregada de requisições por segundo (`sum(rate(http_requests_total[1m]))`);
+  3. **Requisições por Rota e Status HTTP**: Visibilidade detalhada de tráfego e erros (`2xx`, `4xx`, `5xx`);
+  4. **Total Acumulado por Status HTTP**: Contador volumétrico por código de retorno.
+
+---
+
+## 5. Testes Automatizados e Validação Estática
+
+### Testes unitários com detector de concorrência
 
 ```bash
 go test -v -race ./...
 ```
 
-Para validação estática e formatação de código:
+### Validação de formatação e tipagem
 
 ```bash
 gofmt -l .
 go vet ./...
 ```
 
----
-
-## 6. Build e Execução com Docker
-
-### Construir a imagem Docker
+### Validação de sintaxe do Prometheus e regras de alerta (com promtool)
 
 ```bash
-docker build -t http-server-projeto-korp:local .
+docker run --rm -v "$(pwd)/deploy/prometheus:/etc/prometheus:ro" --entrypoint /bin/promtool prom/prometheus:v3.2.1 check config /etc/prometheus/prometheus.yml
+docker run --rm -v "$(pwd)/deploy/prometheus:/etc/prometheus:ro" --entrypoint /bin/promtool prom/prometheus:v3.2.1 check rules /etc/prometheus/rules/alerts.yml
 ```
 
-### Executar o container
+### Validação do schema do Compose
 
 ```bash
-docker run -d --name http-server-projeto-korp -p 8080:8080 http-server-projeto-korp:local
-```
-
-### Validar requisições no container
-
-```bash
-# 1. Requisição válida (200 OK)
-curl -i http://localhost:8080/projeto-korp
-
-# 2. Requisição com método não permitido (405 Method Not Allowed)
-curl -i -X POST http://localhost:8080/projeto-korp
-
-# 3. Rota não mapeada (404 Not Found)
-curl -i http://localhost:8080/rota-invalida
-```
-
-### Parar e remover o container
-
-```bash
-docker stop http-server-projeto-korp && docker rm http-server-projeto-korp
+docker compose config
 ```
 
 ---
 
-## 7. Estrutura do Projeto
+## 6. Estrutura do Projeto
 
 ```text
 .
 ├── cmd/
 │   └── http-server-projeto-korp/
-│       └── main.go                  # Ponto de entrada, configuração do servidor e graceful shutdown
+│       └── main.go                  # Ponto de entrada e graceful shutdown
+├── compose.yaml                     # Orquestração da stack Go + Prometheus + Grafana
+├── deploy/
+│   ├── grafana/
+│   │   ├── dashboards/
+│   │   │   └── http-server-projeto-korp.json  # Dashboard declarativo provisionado
+│   │   └── provisioning/
+│   │       ├── dashboards/dashboards.yml      # Provedor de dashboards
+│   │       └── datasources/prometheus.yml     # Provedor de fonte de dados Prometheus
+│   └── prometheus/
+│       ├── prometheus.yml           # Configuração de scrape e regras
+│       └── rules/
+│           └── alerts.yml           # Alerta ServiceDown
+├── Dockerfile                       # Build multi-stage e runtime seguro em Alpine
+├── go.mod                           # Módulo Go e dependências
+├── go.sum                           # Checksums das dependências
 ├── internal/
 │   └── transport/
 │       └── http/
-│           └── handler.go           # Roteamento e handlers HTTP do endpoint /projeto-korp
+│           ├── handler.go           # Roteamento de /projeto-korp, /healthz e /metrics
+│           └── metrics.go           # Middleware de telemetria e isolamento de registry
 ├── tests/
 │   └── unit/
 │       └── internal/transport/http/
-│           └── handler_test.go      # Testes unitários automatizados do contrato HTTP
-├── Dockerfile                       # Build multi-stage e runtime seguro em Alpine
-├── .dockerignore                    # Exclusão de arquivos desnecessários no build da imagem
-├── go.mod                           # Definição do módulo Go
-├── PLANO_IMPLEMENTACAO_HTTP_SERVER.md # Plano de especificação original
-└── README.md                        # Documentação do serviço
+│           ├── handler_test.go      # Testes unitários do endpoint de negócio
+│           └── metrics_test.go      # Testes de integridade, métricas e isolamento
+├── PLANO_IMPLEMENTACAO_MONITORAMENTO_OBSERVABILIDADE.md # Especificação da Parte 2
+└── README.md                        # Documentação da stack e guia operacional
 ```
 
 ---
 
-## 8. Detalhes de Segurança e Operação
+## 7. Roteiro de Validação e Resolução de Problemas (Troubleshooting)
 
-- **Build Multi-stage**: A compilação é isolada no estágio `builder` (`golang:alpine`), produzindo um binário estático sem dependências de CGO (`CGO_ENABLED=0`).
-- **Imagem de Runtime Mínima**: Utiliza `alpine:latest` contendo apenas os certificados raiz de AC (`ca-certificates`) e dados de fuso (`tzdata`).
-- **Usuário Não-Root**: O container executa sob o usuário não-privilegiado `appuser` (UID 10001).
-- **Timeouts Defensivos**:
-  - `ReadHeaderTimeout`: 5 segundos
-  - `ReadTimeout`: 10 segundos
-  - `WriteTimeout`: 10 segundos
-  - `IdleTimeout`: 60 segundos
-- **Graceful Shutdown**: Intercepta sinais `SIGINT` e `SIGTERM`, fornecendo um período de tolerância de 5 segundos para drenagem de conexões ativas.
+### Validação de fluxo operacional ponta a ponta
+
+1. **Subir a stack**:
+   ```bash
+   docker compose up --build -d
+   ```
+
+2. **Verificar contratos via curl**:
+   ```bash
+   # Saúde
+   curl -fsS http://localhost:8080/healthz
+   # Métricas
+   curl -fsS http://localhost:8080/metrics | grep http_requests_total
+   # Negócio
+   curl -fsS http://localhost:8080/projeto-korp
+   # Prometheus
+   curl -fsS http://localhost:9090/-/ready
+   # Grafana
+   curl -fsS http://localhost:3000/api/health
+   ```
+
+3. **Gerar tráfego para observação**:
+   ```bash
+   for i in {1..20}; do curl -s http://localhost:8080/projeto-korp > /dev/null; done
+   for i in {1..5}; do curl -s -X POST http://localhost:8080/projeto-korp > /dev/null; done
+   for i in {1..5}; do curl -s http://localhost:8080/rota-invalida > /dev/null; done
+   ```
+
+4. **Consultar série `up` no Prometheus**:
+   ```bash
+   curl -s 'http://localhost:9090/api/v1/query?query=up' | grep -o '"value":\[[0-9.]*,"[0-9]"\]'
+   ```
+
+### Simulação de Falha e Recuperação (Disponibilidade)
+
+1. **Simular queda da aplicação**:
+   ```bash
+   docker compose stop http-server-projeto-korp
+   ```
+2. **Observar indisponibilidade no Prometheus**:
+   Após o scrape seguinte, `up{job="http-server-projeto-korp"}` passa para `0`.
+   ```bash
+   curl -s 'http://localhost:9090/api/v1/query?query=up{job="http-server-projeto-korp"}'
+   ```
+3. **Observar alerta**:
+   A regra `ServiceDown` entra no estado `pending` e posteriormente `firing` se a parada ultrapassar 1 minuto.
+4. **Recuperar serviço**:
+   ```bash
+   docker compose start http-server-projeto-korp
+   ```
+   O target retorna ao estado `UP` (`up=1`) e o painel do Grafana volta ao status `ONLINE`.
 
 ---
 
-## 9. Resolução de Problemas (Troubleshooting)
-
-### Porta 8080 já está em uso
-
-Se a porta `8080` já estiver ocupada por outro processo na máquina host:
-
-1. **Identificar o processo em conflito**:
-   ```bash
-   lsof -i :8080
-   # ou
-   ss -tulpn | grep 8080
-   ```
-
-2. **Alterar a porta na execução local**:
-   ```bash
-   PORT=8081 go run ./cmd/http-server-projeto-korp
-   curl -i http://localhost:8081/projeto-korp
-   ```
-
----
-
-## 10. Agentes e skills do projeto
+## 8. Agentes e Skills do Projeto
 
 As instruções locais para agentes ficam em `.agents/`. O ambiente esperado para a evolução do desafio inclui Docker, Docker Compose, Go, Ansible e Git.
 
@@ -212,9 +271,3 @@ Skills disponíveis em `.agents/skills/`:
 `go-http-server`, `docker`, `docker-compose`, `docker-networking`, `nginx-reverse-proxy`, `prometheus`, `grafana`, `observability`, `grafana-provisioning`, `ansible`, `linux-shell` e `yaml-infrastructure`.
 
 As skills de infraestrutura foram criadas localmente após a verificação nominal da página [skills.sh/trending](https://www.skills.sh/trending), que não listava essas áreas no momento da configuração. CI/CD não foi adicionado porque permanece condicional no plano do desafio.
-
-3. **Alterar a porta mapeada no Docker**:
-   ```bash
-   docker run -d --name http-server-projeto-korp -p 8081:8080 http-server-projeto-korp:local
-   curl -i http://localhost:8081/projeto-korp
-   ```
