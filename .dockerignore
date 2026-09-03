@@ -1,0 +1,10 @@
+.git
+.gitignore
+.agents
+*.md
+tests
+bin
+coverage.out
+*.log
+.dockerignore
+Dockerfile
