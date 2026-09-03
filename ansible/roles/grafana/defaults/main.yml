@@ -1,0 +1,7 @@
+---
+grafana_dir: "{{ app_base_dir }}/grafana"
+grafana_provisioning_dir: "{{ grafana_dir }}/provisioning"
+grafana_datasources_dir: "{{ grafana_provisioning_dir }}/datasources"
+grafana_dashboards_prov_dir: "{{ grafana_provisioning_dir }}/dashboards"
+grafana_dashboards_dir: "{{ grafana_dir }}/dashboards"
+grafana_datasource_uid: "prometheus-datasource"

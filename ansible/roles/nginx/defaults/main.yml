@@ -1,0 +1,4 @@
+---
+nginx_conf_dir: "{{ app_base_dir }}/nginx/conf.d"
+nginx_conf_file: "{{ nginx_conf_dir }}/http-server-projeto-korp.conf"
+nginx_client_max_body_size: 1m

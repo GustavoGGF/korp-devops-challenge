@@ -1,0 +1,129 @@
+---
+# ==============================================================================
+# Playbook Principal: Automação da Plataforma Korp DevOps
+# Orquestra pré-validação, Docker, Aplicação Go, NGINX, Monitoramento e Grafana
+# ==============================================================================
+- name: Provisionamento e Configuração da Plataforma Korp
+  hosts: korp_servers
+  become: "{{ enable_become | default(true) }}"
+  gather_facts: true
+
+  pre_tasks:
+    - name: Validar privilégios de superusuário (become)
+      ansible.builtin.assert:
+        that:
+          - ansible_user_id == 'root'
+        fail_msg: "O playbook requer privilégios de superusuário (sudo/become)."
+        success_msg: "Privilégios de superusuário confirmados para o host."
+      when: enable_become | default(true) | bool
+      tags: [pre_check, validation]
+
+    - name: Validar variáveis obrigatórias
+      ansible.builtin.assert:
+        that:
+          - app_base_dir is defined
+          - app_image_name is defined
+          - app_image_tag is defined
+          - nginx_http_port is defined
+          - prometheus_http_port is defined
+          - grafana_http_port is defined
+        fail_msg: "Variáveis obrigatórias da plataforma não estão devidamente definidas em group_vars."
+        success_msg: "Variáveis essenciais validadas com sucesso."
+      tags: [pre_check, validation]
+
+    - name: Criar diretório raiz de instalação com permissões seguras
+      ansible.builtin.file:
+        path: "{{ app_base_dir }}"
+        state: directory
+        owner: "{{ file_owner }}"
+        group: "{{ file_group }}"
+        mode: "0755"
+      tags: [pre_check]
+
+  roles:
+    - role: docker
+      tags: [docker]
+
+    - role: application
+      tags: [application]
+
+    - role: nginx
+      tags: [nginx]
+
+    - role: monitoring
+      tags: [monitoring]
+
+    - role: grafana
+      tags: [grafana]
+
+  post_tasks:
+    - name: Iniciar e convergir todos os containers da plataforma via Compose
+      ansible.builtin.command:
+        cmd: "docker compose -f {{ application_compose_file_dest | default(app_base_dir ~ '/compose.yaml') }} up -d --remove-orphans"
+      register: compose_up_result
+      changed_when: "'Started' in compose_up_result.stdout or 'Creating' in compose_up_result.stdout or 'Recreating' in compose_up_result.stdout"
+      tags: [deploy, lifecycle]
+
+    - name: Aguardar proxy reverso NGINX responder com HTTP 200 na rota /projeto-korp
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ nginx_http_port }}/projeto-korp"
+        method: GET
+        status_code: 200
+        return_content: true
+      register: initial_probe
+      until: initial_probe.status == 200
+      retries: 30
+      delay: 2
+      tags: [smoke_test, validation]
+
+    - name: Aguardar Prometheus estar pronto (readiness)
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ prometheus_http_port }}/-/ready"
+        method: GET
+        status_code: 200
+      register: prom_probe
+      until: prom_probe.status == 200
+      retries: 30
+      delay: 2
+      tags: [monitoring, validation]
+
+    - name: Aguardar Grafana estar pronto (healthcheck)
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ grafana_http_port }}/api/health"
+        method: GET
+        status_code: 200
+      register: grafana_probe
+      until: grafana_probe.status == 200
+      retries: 30
+      delay: 2
+      tags: [grafana, validation]
+
+    # ==========================================================================
+    # Smoke Test Obrigatório — Seção 7 do PLANO_IMPLEMENTACAO_ANSIBLE.md
+    # ==========================================================================
+    - name: "Smoke test: Realizar requisição HTTP ao endpoint /projeto-korp via NGINX"
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ nginx_http_port }}/projeto-korp"
+        method: GET
+        status_code: 200
+        return_content: true
+      register: smoke_test_response
+      tags: [smoke_test]
+
+    - name: "Smoke test: Validar contrato estrito da resposta JSON e campos RFC 3339"
+      ansible.builtin.assert:
+        that:
+          - smoke_test_response.status == 200
+          - "'application/json' in smoke_test_response.content_type"
+          - smoke_test_response.json.nome == "Projeto Korp"
+          - smoke_test_response.json.horario is match('^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$')
+        fail_msg: "Smoke test falhou: a resposta do endpoint /projeto-korp não atende ao contrato esperado."
+        success_msg: "Contrato JSON e formato de data/hora RFC 3339 UTC validados com sucesso."
+      tags: [smoke_test]
+
+    - name: "Smoke test: Exibir resultado oficial no console"
+      ansible.builtin.debug:
+        msg:
+          - "OK: GET http://127.0.0.1:{{ nginx_http_port }}/projeto-korp -> {{ smoke_test_response.status }}"
+          - "Resposta: {{ smoke_test_response.content | trim }}"
+      tags: [smoke_test]

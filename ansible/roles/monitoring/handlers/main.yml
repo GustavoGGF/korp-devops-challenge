@@ -1,0 +1,8 @@
+---
+- name: Reload prometheus
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ prometheus_http_port }}/-/reload"
+    method: POST
+    status_code: [200]
+  register: monitoring_prometheus_reload_result
+  failed_when: false

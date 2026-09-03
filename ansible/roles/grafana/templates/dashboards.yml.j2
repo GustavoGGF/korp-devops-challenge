@@ -1,0 +1,17 @@
+# ==============================================================================
+# Grafana Dashboards Provisioning — Korp DevOps Platform
+# Gerenciado via Ansible — Alterações manuais serão sobrescritas
+# ==============================================================================
+apiVersion: 1
+
+providers:
+  - name: 'default'
+    orgId: 1
+    folder: 'Korp'
+    type: file
+    disableDeletion: true
+    editable: true
+    allowUiUpdates: true
+    updateIntervalSeconds: 30
+    options:
+      path: /etc/grafana/dashboards

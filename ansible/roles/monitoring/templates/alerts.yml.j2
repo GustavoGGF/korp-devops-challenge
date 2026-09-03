@@ -1,0 +1,24 @@
+# ==============================================================================
+# Prometheus Alert Rules — Korp DevOps Platform
+# Gerenciado via Ansible — Alterações manuais serão sobrescritas
+# ==============================================================================
+groups:
+  - name: korp_service_alerts
+    rules:
+      - alert: KorpServiceDown
+        expr: up{job="{{ app_service_name }}"} == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Instância da aplicação Korp está indisponível"
+          description: "O serviço {{ app_service_name }} não respondeu aos scrapes do Prometheus por mais de 30 segundos."
+
+      - alert: KorpHighErrorRate
+        expr: rate(http_requests_total{job="{{ app_service_name }}",status=~"5.."}[1m]) > 0.05
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Taxa de erro 5xx elevada no serviço Korp"
+          description: "O serviço {{ app_service_name }} está retornando erros HTTP 5xx."
