@@ -4,7 +4,7 @@ FROM golang:alpine AS builder
 WORKDIR /build
 
 # Copia arquivos de definição do módulo Go
-COPY go.mod ./
+COPY go.mod go.sum ./
 RUN go mod download
 
 # Copia código-fonte da aplicação
