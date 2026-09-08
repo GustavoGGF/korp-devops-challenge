@@ -312,4 +312,19 @@ Para a lista detalhada de todos os comandos de teste com suas **saídas esperada
   ./tests/validate_platform.sh
   ```
 
+### Queries Prometheus úteis
+
+As principais consultas também são definidas como recording rules em
+`ansible/roles/monitoring/templates/alerts.yml.j2`. Depois que o Prometheus
+carregar as regras, elas podem ser consultadas em `http://localhost:9090/graph`:
+
+```promql
+korp:availability:avg1m
+korp:requests:rate1m
+korp:requests_by_status:rate1m
+korp:errors:rate1m
+```
+
+O dashboard provisionado do Grafana permanece como a interface principal para
+visualização histórica dessas métricas.
 
