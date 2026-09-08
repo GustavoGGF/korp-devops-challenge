@@ -9,6 +9,13 @@
   gather_facts: true
 
   pre_tasks:
+    - name: Carregar cofre Ansible Vault se disponível
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/group_vars/vault.yml"
+      failed_when: false
+      no_log: true
+      tags: [pre_check, validation]
+
     - name: Validar privilégios de superusuário (become)
       ansible.builtin.assert:
         that:
@@ -31,6 +38,21 @@
         success_msg: "Variáveis essenciais validadas com sucesso."
       tags: [pre_check, validation]
 
+    - name: Validar credencial administrativa do Grafana (sem fallback)
+      ansible.builtin.assert:
+        that:
+          - grafana_admin_password is defined
+          - grafana_admin_password | length > 0
+          - grafana_admin_password != 'admin'
+          - grafana_admin_password != 'AdminSecure#2026'
+        fail_msg: >-
+          A senha administrativa do Grafana (grafana_admin_password) é obrigatória e não pode ser vazia,
+          nem conter valores conhecidos ou inseguros ('admin' ou 'AdminSecure#2026').
+          Forneça-a via Ansible Vault (ansible/group_vars/vault.yml) ou pela variável GRAFANA_ADMIN_PASSWORD.
+        success_msg: "Credencial administrativa do Grafana validada com sucesso."
+      no_log: true
+      tags: [pre_check, validation]
+
     - name: Criar diretório raiz de instalação com permissões seguras
       ansible.builtin.file:
         path: "{{ app_base_dir }}"
@@ -44,9 +66,6 @@
     - role: docker
       tags: [docker]
 
-    - role: application
-      tags: [application]
-
     - role: nginx
       tags: [nginx]
 
@@ -55,6 +74,9 @@
 
     - role: grafana
       tags: [grafana]
+
+    - role: application
+      tags: [application]
 
   post_tasks:
     - name: Iniciar e convergir todos os containers da plataforma via Compose

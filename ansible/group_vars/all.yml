@@ -58,5 +58,6 @@ grafana_image: grafana/grafana:11.5.2
 grafana_http_port: 3000
 grafana_bind_ip: "0.0.0.0"
 grafana_admin_user: admin
-# Em produção, utilize Ansible Vault para proteger esta credencial
-grafana_admin_password: "{{ lookup('env', 'GRAFANA_ADMIN_PASSWORD') | default('AdminSecure#2026', true) }}"
+# OBRIGATÓRIO: A credencial deve ser fornecida via Ansible Vault (ex: ansible/group_vars/vault.yml)
+# ou pela variável de ambiente GRAFANA_ADMIN_PASSWORD. Não possui valor padrão/fallback.
+grafana_admin_password: "{{ lookup('env', 'GRAFANA_ADMIN_PASSWORD') | default('', true) }}"
