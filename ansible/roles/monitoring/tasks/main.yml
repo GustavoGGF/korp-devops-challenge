@@ -34,3 +34,21 @@
     mode: "0644"
   notify: Reload prometheus
   tags: [monitoring]
+
+- name: Verificar se container do Prometheus está em execução
+  ansible.builtin.command:
+    cmd: "docker compose -f {{ application_compose_file_dest | default(compose_file_dest) }} ps -q prometheus"
+  register: monitoring_prometheus_running_check
+  changed_when: false
+  failed_when: false
+  tags: [monitoring]
+
+- name: Validar sintaxe da configuração do Prometheus no container em execução
+  ansible.builtin.command:
+    cmd: >-
+      docker compose -f {{ application_compose_file_dest | default(compose_file_dest) }}
+      exec -T prometheus promtool check config /etc/prometheus/prometheus.yml
+  when:
+    - monitoring_prometheus_running_check.stdout | length > 0
+  changed_when: false
+  tags: [monitoring]

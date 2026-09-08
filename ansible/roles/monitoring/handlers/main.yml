@@ -5,4 +5,6 @@
     method: POST
     status_code: [200]
   register: monitoring_prometheus_reload_result
-  failed_when: false
+  retries: 3
+  delay: 2
+  until: monitoring_prometheus_reload_result.status == 200

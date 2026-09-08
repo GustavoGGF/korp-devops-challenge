@@ -1,0 +1,40 @@
+---
+# ==============================================================================
+# Playbook de Teste de Handlers e Validações
+# Utilizado pela suíte automatizada tests/test_ansible_handlers.sh
+# ==============================================================================
+- name: Testar Handlers e Validações Operacionais
+  hosts: korp_servers
+  become: false
+  gather_facts: false
+
+  vars_files:
+    - ../ansible/group_vars/all.yml
+    - ../ansible/roles/application/defaults/main.yml
+    - ../ansible/roles/nginx/defaults/main.yml
+    - ../ansible/roles/monitoring/defaults/main.yml
+
+  vars:
+    compose_file_dest: "{{ application_compose_file_dest }}"
+    compose_file: "{{ application_compose_file_dest }}"
+
+  tasks:
+    - name: Executar diretamente o handler de reload do NGINX
+      ansible.builtin.include_tasks: ../ansible/roles/nginx/handlers/main.yml
+      when: test_target == 'nginx_reload'
+
+    - name: Executar diretamente o handler de reload do Prometheus
+      ansible.builtin.include_tasks: ../ansible/roles/monitoring/handlers/main.yml
+      when: test_target == 'prometheus_reload'
+
+    - name: Executar validação de sintaxe NGINX (nginx -t)
+      ansible.builtin.command:
+        cmd: "docker compose -f {{ compose_file }} exec -T nginx nginx -t"
+      changed_when: false
+      when: test_target == 'nginx_validate'
+
+    - name: Executar validação de configuração Prometheus via promtool
+      ansible.builtin.command:
+        cmd: "docker compose -f {{ compose_file }} exec -T prometheus promtool check config /etc/prometheus/prometheus.yml"
+      changed_when: false
+      when: test_target == 'prometheus_validate'

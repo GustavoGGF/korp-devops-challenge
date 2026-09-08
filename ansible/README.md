@@ -159,9 +159,33 @@ ok: [localhost] => {
 ## 7. Idempotência e Segurança
 
 - **Idempotência**: Uma segunda execução sequencial do playbook não altera arquivos nem recria containers se as configurações não tiverem sido modificadas (`changed=0` nas tasks de estado).
+- **Resiliência e Fail-Fast dos Handlers**: Os handlers de recarregamento (`Reload nginx` e `Reload prometheus`) não mascaram falhas (`failed_when: false` eliminado). Se uma recarga falhar ou o serviço estiver inacessível, o Ansible interrompe o playbook imediatamente. Para tolerar períodos transitórios de subida ou rede, ambos contam com política de retries (`retries: 3`, `delay: 2`).
+- **Validação Sintática Preventiva**: Antes de acionar qualquer reload, as tasks executam checagem sintática ativa diretamente no container:
+  - NGINX: `docker compose exec -T nginx nginx -t`
+  - Prometheus: `docker compose exec -T prometheus promtool check config /etc/prometheus/prometheus.yml`
 - **Backups**: Alterações no template NGINX criam backups automáticos da configuração anterior antes de aplicar novas diretivas.
 - **Segurança de Segredos**: Credenciais como `GF_SECURITY_ADMIN_PASSWORD` são parametrizáveis e nunca versionadas em texto simples. Em produção, use `ansible-vault`:
   ```bash
   ansible-vault create ansible/group_vars/vault.yml
   ```
 - **Persistência de Dados**: Volumes Docker do Prometheus e Grafana (`korp-prometheus-data`, `korp-grafana-data`) são preservados durante atualizações e deploys normais.
+
+---
+
+## 8. Testes Automatizados de Handlers e Resiliência
+
+Uma suíte dedicada valida o comportamento dos handlers sob condições normais e cenários de falha:
+
+```bash
+./tests/test_ansible_handlers.sh
+```
+
+A suíte cobre 7 cenários automatizados:
+1. **Reload NGINX (Cenário válido)**: Garante reload bem-sucedido via `nginx -s reload` (exit code 0).
+2. **Reload Prometheus (Cenário válido)**: Garante reload via endpoint HTTP `POST /-/reload` retornando status `200 OK`.
+3. **Rejeição de Configuração NGINX Inválida**: Bloqueio e falha explícita no teste sintático (`nginx -t`) antes do reload.
+4. **Tratamento de NGINX Inoperante**: Falha explícita quando o container do NGINX está parado (não mascarada).
+5. **Tratamento de Prometheus Inoperante**: Falha explícita quando o Prometheus está inacessível (`Connection refused`).
+6. **Rejeição de Regras Prometheus Inválidas**: Bloqueio por `promtool check config` na presença de regras de alerta malformadas.
+7. **Convergência e Smoke Test Integrado**: Execução completa do playbook com validação HTTP 200 do endpoint `/projeto-korp`.
+
