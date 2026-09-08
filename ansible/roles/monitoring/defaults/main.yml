@@ -1,0 +1,5 @@
+---
+monitoring_prometheus_dir: "{{ app_base_dir }}/prometheus"
+monitoring_prometheus_rules_dir: "{{ monitoring_prometheus_dir }}/rules"
+monitoring_prometheus_conf_file: "{{ monitoring_prometheus_dir }}/prometheus.yml"
+monitoring_prometheus_alerts_file: "{{ monitoring_prometheus_rules_dir }}/alerts.yml"

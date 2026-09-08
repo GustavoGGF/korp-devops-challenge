@@ -1,0 +1,36 @@
+---
+# ==============================================================================
+# Tasks da Role Monitoring: Configuração e Regras do Prometheus
+# ==============================================================================
+
+- name: Garantir diretórios de configuração do Prometheus
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ file_owner }}"
+    group: "{{ file_group }}"
+    mode: "0755"
+  loop:
+    - "{{ monitoring_prometheus_dir }}"
+    - "{{ monitoring_prometheus_rules_dir }}"
+  tags: [monitoring]
+
+- name: Renderizar configuração do Prometheus (prometheus.yml)
+  ansible.builtin.template:
+    src: prometheus.yml.j2
+    dest: "{{ monitoring_prometheus_conf_file }}"
+    owner: "{{ file_owner }}"
+    group: "{{ file_group }}"
+    mode: "0644"
+  notify: Reload prometheus
+  tags: [monitoring]
+
+- name: Renderizar regras de alerta do Prometheus (alerts.yml)
+  ansible.builtin.template:
+    src: alerts.yml.j2
+    dest: "{{ monitoring_prometheus_alerts_file }}"
+    owner: "{{ file_owner }}"
+    group: "{{ file_group }}"
+    mode: "0644"
+  notify: Reload prometheus
+  tags: [monitoring]

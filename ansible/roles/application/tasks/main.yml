@@ -1,0 +1,85 @@
+---
+# ==============================================================================
+# Tasks da Role Application: Sincronização, Build da Imagem e Compose
+# ==============================================================================
+
+- name: Garantir diretórios da aplicação no host alvo
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ file_owner }}"
+    group: "{{ file_group }}"
+    mode: "0755"
+  loop:
+    - "{{ app_base_dir }}"
+    - "{{ app_base_dir }}/app"
+    - "{{ app_base_dir }}/app/cmd"
+    - "{{ app_base_dir }}/app/internal"
+  tags: [application]
+
+- name: Copiar arquivos de build e módulos Go
+  ansible.builtin.copy:
+    src: "{{ app_source_dir }}/{{ item }}"
+    dest: "{{ app_base_dir }}/app/{{ item }}"
+    owner: "{{ file_owner }}"
+    group: "{{ file_group }}"
+    mode: "0644"
+  loop:
+    - Dockerfile
+    - go.mod
+    - go.sum
+  register: application_build_files
+  tags: [application]
+
+- name: Sincronizar diretório cmd/ da aplicação
+  ansible.builtin.copy:
+    src: "{{ app_source_dir }}/cmd/"
+    dest: "{{ app_base_dir }}/app/cmd/"
+    owner: "{{ file_owner }}"
+    group: "{{ file_group }}"
+    mode: "0644"
+  register: application_cmd_files
+  tags: [application]
+
+- name: Sincronizar diretório internal/ da aplicação
+  ansible.builtin.copy:
+    src: "{{ app_source_dir }}/internal/"
+    dest: "{{ app_base_dir }}/app/internal/"
+    owner: "{{ file_owner }}"
+    group: "{{ file_group }}"
+    mode: "0644"
+  register: application_internal_files
+  tags: [application]
+
+- name: Verificar se imagem da aplicação já existe no Docker local
+  ansible.builtin.command:
+    cmd: "docker image inspect {{ app_image_name }}:{{ app_image_tag }}"
+  register: application_docker_image_check
+  failed_when: false
+  changed_when: false
+  tags: [application]
+
+- name: Construir imagem Docker da aplicação
+  ansible.builtin.command:
+    cmd: "docker build -t {{ app_image_name }}:{{ app_image_tag }} {{ application_build_context }}"
+  when: >-
+    application_docker_image_check.rc != 0 or
+    application_build_files.changed or
+    application_cmd_files.changed or
+    application_internal_files.changed
+  changed_when: true
+  notify: Restart stack
+  tags: [application]
+
+- name: Renderizar especificação docker compose da plataforma
+  ansible.builtin.template:
+    src: compose.yaml.j2
+    dest: "{{ application_compose_file_dest }}"
+    owner: "{{ file_owner }}"
+    group: "{{ file_group }}"
+    mode: "0644"
+    validate: "docker compose -f %s config"
+  notify:
+    - Validate compose configuration
+    - Restart stack
+  tags: [application]

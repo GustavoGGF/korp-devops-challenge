@@ -1,0 +1,5 @@
+---
+- name: Restart grafana
+  ansible.builtin.command:
+    cmd: "docker compose -f {{ application_compose_file_dest | default(compose_file_dest) }} restart grafana"
+  changed_when: true

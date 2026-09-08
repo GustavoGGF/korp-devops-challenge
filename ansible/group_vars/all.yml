@@ -1,0 +1,62 @@
+---
+# ==============================================================================
+# Variáveis Globais Ativas — Korp DevOps Platform
+# ==============================================================================
+
+# Diretórios base no host alvo
+app_base_dir: /opt/korp
+app_source_dir: "{{ playbook_dir }}/.."
+file_owner: "{{ 'root' if (enable_become | default(true) | bool) else omit }}"
+file_group: "{{ 'root' if (enable_become | default(true) | bool) else omit }}"
+
+# Sistema Operacional e Requisitos Mínimos
+min_disk_free_mb: 2048
+min_memory_mb: 1024
+required_ports:
+  - 80
+  - 9090
+  - 3000
+
+# Pacotes Docker oficiais para Debian/Ubuntu
+docker_packages:
+  - docker-ce
+  - docker-ce-cli
+  - containerd.io
+  - docker-buildx-plugin
+  - docker-compose-plugin
+
+# Usuário operacional a ser adicionado ao grupo docker
+docker_users:
+  - "{{ ansible_user | default(ansible_env.USER | default('root')) }}"
+
+# Topologia de Redes Docker
+network_frontend_name: korp_frontend
+network_backend_name: korp_backend
+
+# Aplicação Go (http-server-projeto-korp)
+app_service_name: http-server-projeto-korp
+app_image_name: http-server-projeto-korp
+app_image_tag: v1.0.0
+app_internal_port: 8080
+
+# NGINX (Proxy Reverso Edge)
+nginx_image: nginx:1.27-alpine
+nginx_http_port: 80
+nginx_connect_timeout: 5s
+nginx_read_timeout: 10s
+nginx_send_timeout: 10s
+
+# Monitoramento (Prometheus)
+prometheus_image: prom/prometheus:v3.2.1
+prometheus_http_port: 9090
+prometheus_bind_ip: "0.0.0.0"
+prometheus_scrape_interval: 15s
+prometheus_evaluation_interval: 15s
+
+# Visualização e Dashboard (Grafana)
+grafana_image: grafana/grafana:11.5.2
+grafana_http_port: 3000
+grafana_bind_ip: "0.0.0.0"
+grafana_admin_user: admin
+# Em produção, utilize Ansible Vault para proteger esta credencial
+grafana_admin_password: "{{ lookup('env', 'GRAFANA_ADMIN_PASSWORD') | default('AdminSecure#2026', true) }}"

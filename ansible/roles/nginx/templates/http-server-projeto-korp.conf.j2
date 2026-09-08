@@ -1,0 +1,33 @@
+# ==============================================================================
+# Configuração do NGINX Reverse Proxy — Korp DevOps Platform
+# Gerenciado via Ansible — Alterações manuais serão sobrescritas
+# ==============================================================================
+
+upstream korp_backend_app {
+    server {{ app_service_name }}:{{ app_internal_port }};
+    keepalive 32;
+}
+
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name _;
+
+    client_max_body_size {{ nginx_client_max_body_size }};
+
+    # Endpoint funcional da aplicação
+    location /projeto-korp {
+        proxy_pass http://korp_backend_app;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+
+        proxy_connect_timeout {{ nginx_connect_timeout }};
+        proxy_read_timeout {{ nginx_read_timeout }};
+        proxy_send_timeout {{ nginx_send_timeout }};
+    }
+}

@@ -1,0 +1,49 @@
+---
+# ==============================================================================
+# Tasks da Role Grafana: Provisionamento Declarativo de Datasources e Dashboards
+# ==============================================================================
+
+- name: Garantir diretórios de provisionamento do Grafana
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ file_owner }}"
+    group: "{{ file_group }}"
+    mode: "0755"
+  loop:
+    - "{{ grafana_dir }}"
+    - "{{ grafana_provisioning_dir }}"
+    - "{{ grafana_datasources_dir }}"
+    - "{{ grafana_dashboards_prov_dir }}"
+    - "{{ grafana_dashboards_dir }}"
+  tags: [grafana]
+
+- name: Provisionar datasource Prometheus no Grafana
+  ansible.builtin.template:
+    src: datasources.yml.j2
+    dest: "{{ grafana_datasources_dir }}/datasources.yml"
+    owner: "{{ file_owner }}"
+    group: "{{ file_group }}"
+    mode: "0644"
+  notify: Restart grafana
+  tags: [grafana]
+
+- name: Provisionar provider de dashboards no Grafana
+  ansible.builtin.template:
+    src: dashboards.yml.j2
+    dest: "{{ grafana_dashboards_prov_dir }}/dashboards.yml"
+    owner: "{{ file_owner }}"
+    group: "{{ file_group }}"
+    mode: "0644"
+  notify: Restart grafana
+  tags: [grafana]
+
+- name: Copiar definição JSON do dashboard da aplicação Korp
+  ansible.builtin.copy:
+    src: http-server-projeto-korp-dashboard.json
+    dest: "{{ grafana_dashboards_dir }}/http-server-projeto-korp-dashboard.json"
+    owner: "{{ file_owner }}"
+    group: "{{ file_group }}"
+    mode: "0644"
+  notify: Restart grafana
+  tags: [grafana]

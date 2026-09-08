@@ -1,0 +1,105 @@
+# ==============================================================================
+# Docker Compose — Korp DevOps Platform
+# Gerenciado via Ansible — Alterações manuais serão sobrescritas
+# ==============================================================================
+services:
+  {{ app_service_name }}:
+    image: {{ app_image_name }}:{{ app_image_tag }}
+    container_name: {{ app_service_name }}
+    restart: unless-stopped
+    networks:
+      - {{ network_frontend_name }}
+      - {{ network_backend_name }}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:{{ app_internal_port }}/healthz || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  nginx:
+    image: {{ nginx_image }}
+    container_name: nginx
+    restart: unless-stopped
+    ports:
+      - "{{ nginx_http_port }}:80"
+    volumes:
+      - {{ app_base_dir }}/nginx/conf.d:/etc/nginx/conf.d:ro
+    networks:
+      - {{ network_frontend_name }}
+    depends_on:
+      {{ app_service_name }}:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/projeto-korp || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  prometheus:
+    image: {{ prometheus_image }}
+    container_name: prometheus
+    restart: unless-stopped
+    ports:
+      - "{{ prometheus_bind_ip }}:{{ prometheus_http_port }}:9090"
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.enable-lifecycle"
+    volumes:
+      - {{ app_base_dir }}/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - {{ app_base_dir }}/prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus-data:/prometheus
+    networks:
+      - {{ network_backend_name }}
+    depends_on:
+      {{ app_service_name }}:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9090/-/ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  grafana:
+    image: {{ grafana_image }}
+    container_name: grafana
+    restart: unless-stopped
+    ports:
+      - "{{ grafana_bind_ip }}:{{ grafana_http_port }}:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER={{ grafana_admin_user }}
+      - GF_SECURITY_ADMIN_PASSWORD={{ grafana_admin_password }}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - {{ app_base_dir }}/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - {{ app_base_dir }}/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - {{ app_base_dir }}/grafana/dashboards:/etc/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    networks:
+      - {{ network_backend_name }}
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+networks:
+  {{ network_frontend_name }}:
+    name: {{ network_frontend_name }}
+    driver: bridge
+  {{ network_backend_name }}:
+    name: {{ network_backend_name }}
+    driver: bridge
+
+volumes:
+  prometheus-data:
+    name: korp-prometheus-data
+  grafana-data:
+    name: korp-grafana-data

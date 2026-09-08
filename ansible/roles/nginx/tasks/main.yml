@@ -1,0 +1,40 @@
+---
+# ==============================================================================
+# Tasks da Role NGINX: Configuração do Proxy Reverso
+# ==============================================================================
+
+- name: Garantir diretório de configuração do NGINX
+  ansible.builtin.file:
+    path: "{{ nginx_conf_dir }}"
+    state: directory
+    owner: "{{ file_owner }}"
+    group: "{{ file_group }}"
+    mode: "0755"
+  tags: [nginx]
+
+- name: Renderizar configuração do VirtualHost do NGINX
+  ansible.builtin.template:
+    src: http-server-projeto-korp.conf.j2
+    dest: "{{ nginx_conf_file }}"
+    owner: "{{ file_owner }}"
+    group: "{{ file_group }}"
+    mode: "0644"
+    backup: true
+  notify: Reload nginx
+  tags: [nginx]
+
+- name: Verificar se container do NGINX está em execução
+  ansible.builtin.command:
+    cmd: "docker compose -f {{ application_compose_file_dest | default(compose_file_dest) }} ps -q nginx"
+  register: nginx_running_check
+  changed_when: false
+  failed_when: false
+  tags: [nginx]
+
+- name: Validar sintaxe da configuração do NGINX no container em execução
+  ansible.builtin.command:
+    cmd: "docker compose -f {{ application_compose_file_dest | default(compose_file_dest) }} exec -T nginx nginx -t"
+  when:
+    - nginx_running_check.stdout | length > 0
+  changed_when: false
+  tags: [nginx]

@@ -349,3 +349,119 @@ Skills disponíveis em `.agents/skills/`:
 `go-http-server`, `docker`, `docker-compose`, `docker-networking`, `nginx-reverse-proxy`, `prometheus`, `grafana`, `observability`, `grafana-provisioning`, `ansible`, `linux-shell` e `yaml-infrastructure`.
 
 As skills de infraestrutura foram criadas localmente após a verificação nominal da página [skills.sh/trending](https://www.skills.sh/trending), que não listava essas áreas no momento da configuração. CI/CD não foi adicionado porque permanece condicional no plano do desafio.
+
+---
+
+## 11. Automação de Infraestrutura com Ansible (Parte 3)
+
+Toda a plataforma (Docker, aplicação Go, NGINX como proxy reverso, Prometheus e Grafana provisionado) pode ser provisionada e configurada de forma totalmente automatizada, idempotente e reproduzível através do Ansible.
+
+### Arquitetura da Topologia
+
+```text
+Cliente HTTP ---> Porta 80 ---> [NGINX (Reverse Proxy)]
+                                       |  (korp_frontend)
+                                       v
+                                [http-server-projeto-korp:8080]
+                                       |
+                                       +---> (korp_backend)
+                                       |           |
+                                       v           v
+                                [Prometheus] <--- [Grafana]
+```
+
+- **Rede `korp_frontend`**: Conecta o NGINX à aplicação. A aplicação não expõe a porta `8080` diretamente no host.
+- **Rede `korp_backend`**: Rede interna isolada para coleta de métricas pelo Prometheus e visualização pelo Grafana.
+- **Provisionamento Declarativo**: Dashboards e datasources do Grafana são provisionados automaticamente via arquivos de configuração sem intervenção manual.
+
+### Estrutura de Roles
+
+```text
+ansible/
+├── ansible.cfg                           # Configurações globais (pipelining, saída YAML)
+├── inventory/hosts.ini                   # Inventário configurável (hosts remotos e local)
+├── group_vars/all.yml                    # Variáveis globais da plataforma e portas
+├── requirements.yml                      # Coleções Ansible (community.docker, ansible.posix)
+├── site.yml                              # Playbook único de entrada
+└── roles/
+    ├── docker/                           # Validação de OS e instalação do Docker CE & Compose
+    ├── application/                      # Sincronização, build da imagem e compose.yaml
+    ├── nginx/                            # VirtualHost NGINX, proxy reverso e headers
+    ├── monitoring/                       # Scrape configs e regras de alerta Prometheus
+    └── grafana/                          # Provisionamento declarativo de datasource e dashboard
+```
+
+### Pré-requisitos
+
+1. **Control Node**:
+   - `ansible-core` ou `ansible` (versão 2.16+)
+   - Coleções necessárias instaladas:
+     ```bash
+     ansible-galaxy collection install -r ansible/requirements.yml
+     ```
+2. **Managed Node** (alvo):
+   - Ubuntu 22.04/24.04 LTS ou Debian 12 (x86_64 ou arm64).
+   - Usuário com acesso SSH e permissão de `sudo` (`become: true`).
+   - Mínimo de 1 GB de RAM e 2 GB livres em disco.
+
+### Comando Oficial de Execução
+
+Após configurar o inventário em `ansible/inventory/hosts.ini`:
+
+```bash
+ansible-playbook -i ansible/inventory/hosts.ini ansible/site.yml
+```
+
+### Smoke Test Obrigatório
+
+O playbook executa um teste de fumaça automático ao final do provisionamento contra `http://127.0.0.1/projeto-korp`, validando:
+- Código HTTP `200 OK`
+- `Content-Type: application/json`
+- Objeto JSON contendo `nome == "Projeto Korp"` e `horario` em UTC (RFC 3339).
+
+Saída esperada no console:
+```text
+TASK [Smoke test: Exibir resultado oficial no console] *************************
+ok: [localhost] => {
+    "msg": [
+        "OK: GET http://127.0.0.1:80/projeto-korp -> 200",
+        "Resposta: {\"nome\":\"Projeto Korp\",\"horario\":\"2026-09-03T15:30:00Z\"}"
+    ]
+}
+```
+
+### Validações de Qualidade e Idempotência
+
+- **Validação Sintática**: `ansible-playbook -i ansible/inventory/hosts.ini ansible/site.yml --syntax-check`
+- **Linting de Boas Práticas**: `ansible-lint ansible/site.yml` (Aprovado em nível `production`)
+- **Linting YAML**: `yamllint ansible/` (Zero erros/avisos)
+- **Idempotência**: Uma segunda execução consecutiva mantém `changed=0` nas configurações.
+
+---
+
+## 12. Guia de Testes e Validação Completa
+
+Para a lista detalhada de todos os comandos de teste com suas **saídas esperadas reais** (Go, Docker, NGINX, Prometheus, Grafana e Ansible), consulte o guia oficial:
+
+- **Documentação de Testes**: [TESTES.md](file:///mnt/codes/korp-devops-challenge/TESTES.md)
+- **Script de Validação Automatizada (20 testes)**:
+  ```bash
+  ./tests/validate_platform.sh
+  ```
+
+### Queries Prometheus úteis
+
+As principais consultas também são definidas como recording rules em
+`ansible/roles/monitoring/templates/alerts.yml.j2`. Depois que o Prometheus
+carregar as regras, elas podem ser consultadas em `http://localhost:9090/graph`:
+
+```promql
+korp:availability:avg1m
+korp:requests:rate1m
+korp:requests_by_status:rate1m
+korp:errors:rate1m
+```
+
+O dashboard provisionado do Grafana permanece como a interface principal para
+visualização histórica dessas métricas.
+
