@@ -107,6 +107,23 @@ jobs:
             exit 1
           fi
 
+          echo "Aguardando healthcheck do NGINX..."
+          timeout=30
+          while [ $timeout -gt 0 ]; do
+            STATUS=$(docker inspect --format='{{json .State.Health.Status}}' $(docker compose ps -q nginx) 2>/dev/null || echo "starting")
+            if [ "$STATUS" = "\"healthy\"" ]; then
+              echo "NGINX está saudável!"
+              break
+            fi
+            sleep 1
+            timeout=$((timeout - 1))
+          done
+          if [ $timeout -le 0 ]; then
+            echo "Timeout aguardando healthcheck do NGINX"
+            docker compose logs nginx
+            exit 1
+          fi
+
       - name: Run integration and reverse proxy smoke tests
         run: |
           docker compose ps
