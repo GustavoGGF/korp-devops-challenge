@@ -3,6 +3,29 @@
 # Gerenciado via Ansible — Alterações manuais serão sobrescritas
 # ==============================================================================
 groups:
+  - name: korp_service_recording_rules
+    interval: 15s
+    rules:
+      - record: korp:availability:avg1m
+        expr: avg_over_time(up{job="{{ app_service_name }}"}[1m])
+        labels:
+          service: "{{ app_service_name }}"
+
+      - record: korp:requests:rate1m
+        expr: sum(rate(http_requests_total{job="{{ app_service_name }}"}[1m]))
+        labels:
+          service: "{{ app_service_name }}"
+
+      - record: korp:requests_by_status:rate1m
+        expr: sum by (status) (rate(http_requests_total{job="{{ app_service_name }}"}[1m]))
+        labels:
+          service: "{{ app_service_name }}"
+
+      - record: korp:errors:rate1m
+        expr: sum(rate(http_requests_total{job="{{ app_service_name }}",status=~"5.."}[1m]))
+        labels:
+          service: "{{ app_service_name }}"
+
   - name: korp_service_alerts
     rules:
       - alert: KorpServiceDown
