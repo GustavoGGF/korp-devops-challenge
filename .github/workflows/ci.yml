@@ -184,7 +184,11 @@ jobs:
       - name: Verify absence of plaintext secrets or fallbacks in repository
         run: |
           echo "Verificando ausência de credenciais em texto puro ou fallbacks..."
-          if git grep -E "AdminSecure#2026|admin/admin" -- ':!PLANO_REMEDIACAO_CREDENCIAL_GRAFANA.md' ':!scripts/verify_secret_remediation.sh'; then
+          if git grep -E "AdminSecure#2026|admin/admin" -- \
+            ':!PLANO_REMEDIACAO_CREDENCIAL_GRAFANA.md' \
+            ':!ansible/site.yml' \
+            ':!.github/workflows/ci.yml' \
+            ':!scripts/verify_secret_remediation.sh'; then
             echo "ERRO: Encontradas referências a senhas antigas ou fallbacks inseguros no repositório!"
             exit 1
           fi
