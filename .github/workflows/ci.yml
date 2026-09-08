@@ -73,3 +73,93 @@ jobs:
           format: 'table'
           exit-code: '0'
           severity: 'CRITICAL,HIGH'
+
+  compose-test:
+    name: Docker Compose Integration Test
+    needs: test-and-lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate Compose configuration
+        run: docker compose config
+
+      - name: Build and start Compose environment
+        run: docker compose up -d --build
+
+      - name: Wait for services readiness
+        run: |
+          echo "Aguardando healthcheck do serviço http-server-projeto-korp..."
+          timeout=30
+          while [ $timeout -gt 0 ]; do
+            STATUS=$(docker inspect --format='{{json .State.Health.Status}}' $(docker compose ps -q http-server-projeto-korp) 2>/dev/null || echo "starting")
+            if [ "$STATUS" = "\"healthy\"" ]; then
+              echo "Serviço está saudável!"
+              break
+            fi
+            sleep 1
+            timeout=$((timeout - 1))
+          done
+          if [ $timeout -le 0 ]; then
+            echo "Timeout aguardando healthcheck"
+            docker compose logs
+            exit 1
+          fi
+
+      - name: Run integration and reverse proxy smoke tests
+        run: |
+          docker compose ps
+          docker compose exec nginx nginx -t
+
+          echo "Validando endpoint /projeto-korp via NGINX (porta 80)..."
+          HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" http://localhost:80/projeto-korp)
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "Falha: esperado HTTP 200 via NGINX, recebido $HTTP_CODE"
+            cat /tmp/response.json
+            exit 1
+          fi
+
+          echo "Validando conteúdo do payload JSON..."
+          if ! grep -q '"nome":"Projeto Korp"' /tmp/response.json; then
+            echo "Campo 'nome' inválido ou ausente no JSON"
+            cat /tmp/response.json
+            exit 1
+          fi
+
+          if ! grep -q '"horario":' /tmp/response.json; then
+            echo "Campo 'horario' ausente no JSON"
+            cat /tmp/response.json
+            exit 1
+          fi
+
+          echo "Validando isolamento da porta 8080 (não deve responder no host)..."
+          if curl -s --connect-timeout 2 http://localhost:8080/projeto-korp; then
+            echo "Erro de isolamento: porta 8080 respondeu diretamente no host!"
+            exit 1
+          else
+            echo "Isolamento confirmado: porta 8080 não é acessível externamente."
+          fi
+
+          echo "Validando respostas para rota inexistente e método inválido..."
+          NOT_FOUND_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:80/)
+          if [ "$NOT_FOUND_CODE" != "404" ]; then
+            echo "Esperado HTTP 404 em /, recebido $NOT_FOUND_CODE"
+            exit 1
+          fi
+
+          METHOD_NOT_ALLOWED_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:80/projeto-korp)
+          if [ "$METHOD_NOT_ALLOWED_CODE" != "405" ]; then
+            echo "Esperado HTTP 405 em POST /projeto-korp, recebido $METHOD_NOT_ALLOWED_CODE"
+            exit 1
+          fi
+
+          echo "Todos os testes de integração do Docker Compose foram validados com sucesso!"
+
+      - name: Dump Compose logs on failure
+        if: failure()
+        run: docker compose logs
+
+      - name: Tear down Compose environment
+        if: always()
+        run: docker compose down
