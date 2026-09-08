@@ -83,6 +83,19 @@ Expõe métricas no formato padrão de texto do Prometheus:
 
 O ambiente completo de aplicação e observabilidade é orquestrado via `compose.yaml`.
 
+### Configuração de variáveis de ambiente (Desenvolvimento Local)
+
+Antes de iniciar os containers para desenvolvimento local ou laboratório, copie o arquivo de exemplo `.env.example` para `.env` e defina a senha administrativa do Grafana:
+
+```bash
+cp .env.example .env
+# Edite o arquivo .env e configure uma senha forte em GRAFANA_ADMIN_PASSWORD
+```
+
+> [!IMPORTANT]
+> O arquivo `.env` é destinado exclusivamente ao desenvolvimento local e laboratório.
+> Para implantações oficiais e produção, utilize sempre a automação com **Ansible Vault** (`ansible/site.yml`), que garante isolamento, permissões `0600` e criptografia das credenciais.
+
 ### Subir o ambiente
 
 ```bash
@@ -95,7 +108,7 @@ docker compose up --build -d
 |---|---|---|---|
 | `http-server-projeto-korp` | `8080` | `http://localhost:8080` | Aplicação Go |
 | `prometheus` | `9090` | `http://localhost:9090` | Servidor Prometheus v3.2.1 |
-| `grafana` | `3000` | `http://localhost:3000` | Painéis Grafana v11.5.2 (user: `admin`, pass: `admin`) |
+| `grafana` | `3000` | `http://localhost:3000` | Painéis Grafana v11.5.2 (credencial definida via Vault ou `.env`) |
 
 ### Verificar estado dos containers
 

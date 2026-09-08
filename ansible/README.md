@@ -115,19 +115,35 @@ localhost ansible_connection=local ansible_python_interpreter=/usr/bin/python3
 ansible-playbook -i ansible/inventory/hosts.ini ansible/site.yml --syntax-check
 ```
 
-### Execução Completa (Comando Oficial)
+### Execução Completa (Comandos Oficiais)
+
+#### 1. Execução Padrão com Ansible Vault (Recomendado para Produção e Laboratório)
+Utilize `--ask-vault-pass` para informar a senha do cofre de forma interativa:
 ```bash
-ansible-playbook -i ansible/inventory/hosts.ini ansible/site.yml
+ansible-playbook -i ansible/inventory/hosts.ini ansible/site.yml --ask-vault-pass
+```
+
+> **Nota de Laboratório**: Para validação e testes locais neste repositório, o arquivo `ansible/group_vars/vault.yml` está criptografado com a senha de laboratório: `korp-vault-lab-2026`.
+
+#### 2. Execução com Arquivo de Senha do Vault
+```bash
+ansible-playbook -i ansible/inventory/hosts.ini ansible/site.yml --vault-password-file /caminho/seguro/vault_pass
+```
+
+#### 3. Execução em CI/Laboratório via Variável de Ambiente
+Caso utilize automações ou pipelines sem arquivo Vault:
+```bash
+GRAFANA_ADMIN_PASSWORD="SuaSenhaForte123!" ansible-playbook -i ansible/inventory/hosts.ini ansible/site.yml
 ```
 
 ### Execução com Tags Específicas
 Você pode isolar tarefas utilizando tags:
 ```bash
 # Apenas validação inicial e instalação do Docker
-ansible-playbook -i ansible/inventory/hosts.ini ansible/site.yml --tags docker
+ansible-playbook -i ansible/inventory/hosts.ini ansible/site.yml --tags docker --ask-vault-pass
 
 # Apenas deploy da aplicação e proxy
-ansible-playbook -i ansible/inventory/hosts.ini ansible/site.yml --tags application,nginx
+ansible-playbook -i ansible/inventory/hosts.ini ansible/site.yml --tags application,nginx --ask-vault-pass
 
 # Apenas smoke test
 ansible-playbook -i ansible/inventory/hosts.ini ansible/site.yml --tags smoke_test
@@ -160,8 +176,51 @@ ok: [localhost] => {
 
 - **Idempotência**: Uma segunda execução sequencial do playbook não altera arquivos nem recria containers se as configurações não tiverem sido modificadas (`changed=0` nas tasks de estado).
 - **Backups**: Alterações no template NGINX criam backups automáticos da configuração anterior antes de aplicar novas diretivas.
-- **Segurança de Segredos**: Credenciais como `GF_SECURITY_ADMIN_PASSWORD` são parametrizáveis e nunca versionadas em texto simples. Em produção, use `ansible-vault`:
-  ```bash
-  ansible-vault create ansible/group_vars/vault.yml
-  ```
+- **Segurança de Segredos (Ansible Vault)**: Credenciais administrativas não possuem fallback e nunca são versionadas em texto simples.
+  - **Cofre de Laboratório**: O repositório inclui `ansible/group_vars/vault.yml` criptografado com a senha de testes `korp-vault-lab-2026`.
+  - **Produção e Rekey**: Para alterar a senha do cofre para o ambiente de produção:
+    ```bash
+    ansible-vault rekey ansible/group_vars/vault.yml
+    ```
+  - **Edição de Segredos**:
+    ```bash
+    ansible-vault edit ansible/group_vars/vault.yml
+    ```
+- **Proteção de Segredos no Host Alvo**:
+  - As credenciais do Grafana são gravadas exclusivamente no arquivo `{{ app_base_dir }}/grafana/grafana.env` com permissões restritas `0600` e propriedade de `root:root`.
+  - A task Ansible de provisionamento utiliza `no_log: true` para evitar que a credencial seja exposta em logs, relatórios ou execuções com `--diff`.
+  - O arquivo `compose.yaml` gerado não contém credenciais em texto claro e possui permissões `0640`.
 - **Persistência de Dados**: Volumes Docker do Prometheus e Grafana (`korp-prometheus-data`, `korp-grafana-data`) são preservados durante atualizações e deploys normais.
+
+---
+
+## 8. Procedimento Operacional de Rotação de Credenciais
+
+Caso uma credencial seja comprometida ou precise de rotação periódica:
+
+1. **Gerar uma nova credencial forte**:
+   ```bash
+   openssl rand -base64 24
+   ```
+2. **Atualizar o segredo no Ansible Vault**:
+   ```bash
+   ansible-vault edit ansible/group_vars/vault.yml
+   ```
+3. **Aplicar a rotação**:
+   - **Novo Deploy / Ambiente Limpo**:
+     Execute o playbook normalmente com `--ask-vault-pass`. O Grafana inicializará a base já com a nova senha.
+   - **Ambiente Ativo com Volume Persistente**:
+     Como o Grafana persiste a senha na base interna no primeiro boot, execute a rotação interna via CLI no container e aplique o playbook para sincronizar o arquivo de ambiente:
+     ```bash
+     docker exec -it grafana grafana-cli admin reset-admin-password "<nova_senha>"
+     ansible-playbook -i ansible/inventory/hosts.ini ansible/site.yml --tags grafana --ask-vault-pass
+     ```
+4. **Validar a rotação**:
+   - Confirmar que a senha antiga retorna `HTTP 401 Unauthorized`:
+     ```bash
+     curl -s -o /dev/null -w "%{http_code}" -u "admin:<senha_antiga>" http://localhost:3000/api/user
+     ```
+   - Confirmar que a nova senha retorna `HTTP 200 OK`:
+     ```bash
+     curl -s -o /dev/null -w "%{http_code}" -u "admin:<nova_senha>" http://localhost:3000/api/user
+     ```
