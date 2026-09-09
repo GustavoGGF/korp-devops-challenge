@@ -301,12 +301,6 @@ Server: nginx/1.27.5
 Content-Type: application/json
 ```
 
-#### Acompanhar os logs da aplicação
-
-```bash
-docker compose logs -f http-server-projeto-korp
-```
- 
 #### Encerrar o ambiente
  
 ```bash
