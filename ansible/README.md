@@ -115,6 +115,27 @@ localhost ansible_connection=local ansible_python_interpreter=/usr/bin/python3
 ansible-playbook -i ansible/inventory/hosts.ini ansible/site.yml --syntax-check
 ```
 
+### Senha do Ansible Vault no laboratório
+
+Para tornar o desafio reproduzível em um repositório público, o Vault incluído neste
+projeto usa intencionalmente uma senha pública e exclusiva para laboratório:
+
+```text
+korp-vault-lab-2026
+```
+
+Essa senha não deve ser reutilizada em produção. Em um ambiente real, solicite a senha
+por um canal seguro ou use um gerenciador de segredos. A senha pode ser validada sem
+exibir o conteúdo descriptografado:
+
+```bash
+if ansible-vault view ansible/group_vars/vault.yml --ask-vault-pass >/dev/null; then
+  echo "Senha do Vault válida."
+else
+  echo "Senha do Vault inválida ou arquivo inacessível."
+fi
+```
+
 ### Execução Completa (Comandos Oficiais)
 
 #### 1. Execução Padrão com Ansible Vault (Recomendado para Produção e Laboratório)
@@ -123,7 +144,7 @@ Utilize `--ask-vault-pass` para informar a senha do cofre de forma interativa:
 ansible-playbook -i ansible/inventory/hosts.ini ansible/site.yml --ask-vault-pass
 ```
 
-> **Nota de Laboratório**: Para validação e testes locais neste repositório, o arquivo `ansible/group_vars/vault.yml` está criptografado com a senha de laboratório: `korp-vault-lab-2026`.
+> **Nota de Laboratório**: A senha acima é pública por decisão de projeto para permitir a execução do desafio. O arquivo `ansible/group_vars/vault.yml` deve continuar versionado apenas em formato criptografado.
 
 #### 2. Execução com Arquivo de Senha do Vault
 ```bash
