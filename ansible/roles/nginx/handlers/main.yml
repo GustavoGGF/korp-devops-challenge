@@ -4,4 +4,6 @@
     cmd: "docker compose -f {{ application_compose_file_dest | default(compose_file_dest) }} exec -T nginx nginx -s reload"
   register: nginx_reload_result
   changed_when: true
-  failed_when: false
+  retries: 3
+  delay: 2
+  until: nginx_reload_result.rc == 0

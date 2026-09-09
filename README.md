@@ -6,7 +6,7 @@ Serviço HTTP em Go desenvolvido como parte do desafio técnico Korp DevOps. O s
 
 ## 1. Visão Geral e Arquitetura
 
-- **Linguagem**: Go (1.24+) utilizando a biblioteca padrão `net/http` e cliente Prometheus oficial (`github.com/prometheus/client_golang`).
+- **Linguagem**: Go (1.25+) utilizando a biblioteca padrão `net/http` e cliente Prometheus oficial (`github.com/prometheus/client_golang`).
 - **Porta padrão da aplicação**: `8080` (configurável via variável de ambiente `PORT`).
 - **Conteinerização**: Docker com build multi-stage, binário estático e usuário não-root para segurança.
 - **Robustez operacional**: Timeouts defensivos de conexão, *graceful shutdown* com propagação de contexto e registry isolado de telemetria.
@@ -256,10 +256,18 @@ docker compose down
  
 ```text
 .
+├── .yamllint.yml                    # Regras de linting YAML padronizadas
+├── ansible/                         # Automação de infraestrutura e orquestração Ansible
+│   ├── ansible.cfg                  # Configurações do Ansible
+│   ├── group_vars/                  # Variáveis globais da plataforma
+│   ├── inventory/                   # Inventário de hosts gerenciados
+│   ├── requirements.yml             # Dependências de coleções Ansible
+│   ├── roles/                       # Roles: docker, application, nginx, monitoring, grafana
+│   └── site.yml                     # Playbook principal de orquestração
 ├── cmd/
 │   └── http-server-projeto-korp/
 │       └── main.go                  # Ponto de entrada e graceful shutdown
-├── compose.yaml                     # Orquestração da stack Go + Prometheus + Grafana
+├── compose.yaml                     # Orquestração multi-container da stack completa
 ├── deploy/
 │   ├── grafana/
 │   │   ├── dashboards/
@@ -279,12 +287,16 @@ docker compose down
 │       └── http/
 │           ├── handler.go           # Roteamento de /projeto-korp, /healthz e /metrics
 │           └── metrics.go           # Middleware de telemetria e isolamento de registry
+├── nginx/
+│   └── conf.d/
+│       └── http-server-projeto-korp.conf      # VirtualHost do proxy reverso NGINX
 ├── tests/
+│   ├── test_ansible_handlers.sh     # Suíte automatizada de testes de resiliência de handlers
+│   ├── test_handlers.yml            # Playbook de isolamento para validação de handlers
 │   └── unit/
 │       └── internal/transport/http/
 │           ├── handler_test.go      # Testes unitários do endpoint de negócio
 │           └── metrics_test.go      # Testes de integridade, métricas e isolamento
-├── PLANO_IMPLEMENTACAO_MONITORAMENTO_OBSERVABILIDADE.md # Especificação da Parte 2
 └── README.md                        # Documentação da stack e guia operacional
 ```
  
@@ -428,19 +440,36 @@ ok: [localhost] => {
 
 - **Validação Sintática**: `ansible-playbook -i ansible/inventory/hosts.ini ansible/site.yml --syntax-check`
 - **Linting de Boas Práticas**: `ansible-lint ansible/site.yml` (Aprovado em nível `production`)
-- **Linting YAML**: `yamllint ansible/` (Zero erros/avisos)
+- **Linting YAML**: `yamllint ansible/ .yamllint.yml` (Regras padronizadas via `.yamllint.yml`, zero erros/avisos)
+- **Validação de Handlers e Resiliência**: `./tests/test_ansible_handlers.sh` (Suíte de 7 cenários cobrindo reload bem-sucedido, bloqueio de sintaxe inválida e fail-fast com container parado)
 - **Idempotência**: Uma segunda execução consecutiva mantém `changed=0` nas configurações.
 
 ---
 
 ## 10. Guia de Testes e Validação Completa
 
-Para a lista detalhada de todos os comandos de teste com suas **saídas esperadas reais** (Go, Docker, NGINX, Prometheus, Grafana e Ansible), consulte o guia oficial:
+A plataforma possui testes automatizados e procedimentos de verificação operacional para cada camada da arquitetura:
 
-- **Documentação de Testes**: [TESTES.md](file:///mnt/codes/korp-devops-challenge/TESTES.md)
-- **Script de Validação Automatizada (20 testes)**:
+- **Testes Unitários Go (com detector de race conditions)**:
   ```bash
-  ./tests/validate_platform.sh
+  go test -v -race ./...
+  ```
+- **Suíte de Testes Automatizada de Handlers Ansible (7 cenários)**:
+  ```bash
+  ./tests/test_ansible_handlers.sh
+  ```
+- **Validação Sintática do NGINX no Container**:
+  ```bash
+  docker compose exec -T nginx nginx -t
+  ```
+- **Validação de Configuração e Alertas do Prometheus via Promtool**:
+  ```bash
+  docker compose exec -T prometheus promtool check config /etc/prometheus/prometheus.yml
+  docker compose exec -T prometheus promtool check rules /etc/prometheus/rules/alerts.yml
+  ```
+- **Smoke Test Oficial de Negócio via Proxy Reverso**:
+  ```bash
+  curl -i http://localhost:80/projeto-korp
   ```
 
 ### Queries Prometheus úteis

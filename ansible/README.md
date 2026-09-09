@@ -174,7 +174,8 @@ ansible-playbook -i ansible/inventory/hosts.ini ansible/site.yml --tags smoke_te
 
 ## 6. Smoke Test e Validação de Aceite
 
-No final da execução, o playbook executa automaticamente o smoke test contra `http://127.0.0.1/projeto-korp`, validando:
+No final da execução, o playbook executa automaticamente o smoke test contra `http://127.0.0.1/projeto-
+`, validando:
 - Status HTTP `200 OK`
 - Cabeçalho `Content-Type: application/json`
 - Propriedade `nome: "Projeto Korp"`
@@ -196,6 +197,10 @@ ok: [localhost] => {
 ## 7. Idempotência e Segurança
 
 - **Idempotência**: Uma segunda execução sequencial do playbook não altera arquivos nem recria containers se as configurações não tiverem sido modificadas (`changed=0` nas tasks de estado).
+- **Resiliência e Fail-Fast dos Handlers**: Os handlers de recarregamento (`Reload nginx` e `Reload prometheus`) não mascaram falhas (`failed_when: false` eliminado). Se uma recarga falhar ou o serviço estiver inacessível, o Ansible interrompe o playbook imediatamente. Para tolerar períodos transitórios de subida ou rede, ambos contam com política de retries (`retries: 3`, `delay: 2`).
+- **Validação Sintática Preventiva**: Antes de acionar qualquer reload, as tasks executam checagem sintática ativa diretamente no container:
+  - NGINX: `docker compose exec -T nginx nginx -t`
+  - Prometheus: `docker compose exec -T prometheus promtool check config /etc/prometheus/prometheus.yml`
 - **Backups**: Alterações no template NGINX criam backups automáticos da configuração anterior antes de aplicar novas diretivas.
 - **Segurança de Segredos (Ansible Vault)**: Credenciais administrativas não possuem fallback e nunca são versionadas em texto simples.
   - **Cofre de Laboratório**: O repositório inclui `ansible/group_vars/vault.yml` criptografado com a senha de testes `korp-vault-lab-2026`.
