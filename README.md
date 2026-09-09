@@ -38,7 +38,7 @@ O uso de Ansible Vault e as validações de produção estão descritos no
 
 ## 1. Visão Geral e Arquitetura
 
-- **Linguagem**: Go (1.24+) utilizando a biblioteca padrão `net/http` e cliente Prometheus oficial (`github.com/prometheus/client_golang`).
+- **Linguagem**: Go (1.25+) utilizando a biblioteca padrão `net/http` e cliente Prometheus oficial (`github.com/prometheus/client_golang`).
 - **Porta padrão da aplicação**: `8080` (configurável via variável de ambiente `PORT`).
 - **Conteinerização**: Docker com build multi-stage, binário estático e usuário não-root para segurança.
 - **Robustez operacional**: Timeouts defensivos de conexão, *graceful shutdown* com propagação de contexto e registry isolado de telemetria.
