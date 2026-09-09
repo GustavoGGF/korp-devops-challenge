@@ -173,7 +173,7 @@ docker compose config
  
 ---
  
-## 7. Orquestração Multi-Container com Docker Compose e NGINX Reverse Proxy
+## 6. Orquestração Multi-Container com Docker Compose e NGINX Reverse Proxy
  
 O ambiente completo de produção simulada opera com dois containers orquestrados via `compose.yaml`:
  
@@ -236,10 +236,11 @@ Exemplo de resposta:
 HTTP/1.1 200 OK
 Server: nginx/1.27.5
 Content-Type: application/json
+```
 
-## 6. Estrutura do Projeto
+#### Acompanhar os logs da aplicação
 
-# Apenas o servidor Go
+```bash
 docker compose logs -f http-server-projeto-korp
 ```
  
@@ -251,7 +252,7 @@ docker compose down
  
 ---
  
-## 8. Estrutura do Projeto
+## 7. Estrutura do Projeto
  
 ```text
 .
@@ -289,7 +290,7 @@ docker compose down
  
 ---
 
-## 7. Roteiro de Validação e Resolução de Problemas (Troubleshooting)
+## 8. Roteiro de Validação e Resolução de Problemas (Troubleshooting)
 
 ### Validação de fluxo operacional ponta a ponta
 
@@ -345,27 +346,7 @@ docker compose down
 
 ---
 
-## 8. Agentes e Skills do Projeto
-
-As instruções locais para agentes ficam em `.agents/`. O ambiente esperado para a evolução do desafio inclui Docker, Docker Compose, Go, Ansible e Git.
- 
-Agentes especializados:
- 
-- `container-agent`: Docker, Docker Compose e redes Docker.
-- `reverse-proxy-agent`: NGINX como proxy reverso.
-- `observability-agent`: Prometheus, Grafana, alertas e provisioning.
-- `infrastructure-agent`: Ansible, Linux/Shell e YAML de infraestrutura.
-- `go-http-agent`: servidores HTTP e APIs em Go.
- 
-Skills disponíveis em `.agents/skills/`:
- 
-`go-http-server`, `docker`, `docker-compose`, `docker-networking`, `nginx-reverse-proxy`, `prometheus`, `grafana`, `observability`, `grafana-provisioning`, `ansible`, `linux-shell` e `yaml-infrastructure`.
-
-As skills de infraestrutura foram criadas localmente após a verificação nominal da página [skills.sh/trending](https://www.skills.sh/trending), que não listava essas áreas no momento da configuração. CI/CD não foi adicionado porque permanece condicional no plano do desafio.
-
----
-
-## 11. Automação de Infraestrutura com Ansible (Parte 3)
+## 9. Automação de Infraestrutura com Ansible (Parte 3)
 
 Toda a plataforma (Docker, aplicação Go, NGINX como proxy reverso, Prometheus e Grafana provisionado) pode ser provisionada e configurada de forma totalmente automatizada, idempotente e reproduzível através do Ansible.
 
@@ -452,7 +433,7 @@ ok: [localhost] => {
 
 ---
 
-## 12. Guia de Testes e Validação Completa
+## 10. Guia de Testes e Validação Completa
 
 Para a lista detalhada de todos os comandos de teste com suas **saídas esperadas reais** (Go, Docker, NGINX, Prometheus, Grafana e Ansible), consulte o guia oficial:
 
@@ -477,4 +458,3 @@ korp:errors:rate1m
 
 O dashboard provisionado do Grafana permanece como a interface principal para
 visualização histórica dessas métricas.
-
