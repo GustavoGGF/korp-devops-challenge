@@ -83,6 +83,19 @@ Expõe métricas no formato padrão de texto do Prometheus:
 
 O ambiente completo de aplicação e observabilidade é orquestrado via `compose.yaml`.
 
+### Configuração de variáveis de ambiente (Desenvolvimento Local)
+
+Antes de iniciar os containers para desenvolvimento local ou laboratório, copie o arquivo de exemplo `.env.example` para `.env` e defina a senha administrativa do Grafana:
+
+```bash
+cp .env.example .env
+# Edite o arquivo .env e configure uma senha forte em GRAFANA_ADMIN_PASSWORD
+```
+
+> [!IMPORTANT]
+> O arquivo `.env` é destinado exclusivamente ao desenvolvimento local e laboratório.
+> Para implantações oficiais e produção, utilize sempre a automação com **Ansible Vault** (`ansible/site.yml`), que garante isolamento, permissões `0600` e criptografia das credenciais.
+
 ### Subir o ambiente
 
 ```bash
@@ -95,7 +108,7 @@ docker compose up --build -d
 |---|---|---|---|
 | `http-server-projeto-korp` | `8080` | `http://localhost:8080` | Aplicação Go |
 | `prometheus` | `9090` | `http://localhost:9090` | Servidor Prometheus v3.2.1 |
-| `grafana` | `3000` | `http://localhost:3000` | Painéis Grafana v11.5.2 (user: `admin`, pass: `admin`) |
+| `grafana` | `3000` | `http://localhost:3000` | Painéis Grafana v11.5.2 (credencial definida via Vault ou `.env`) |
 
 ### Verificar estado dos containers
 
@@ -160,7 +173,7 @@ docker compose config
  
 ---
  
-## 7. Orquestração Multi-Container com Docker Compose e NGINX Reverse Proxy
+## 6. Orquestração Multi-Container com Docker Compose e NGINX Reverse Proxy
  
 O ambiente completo de produção simulada opera com dois containers orquestrados via `compose.yaml`:
  
@@ -223,27 +236,11 @@ Exemplo de resposta:
 HTTP/1.1 200 OK
 Server: nginx/1.27.5
 Content-Type: application/json
-
-{"nome":"Projeto Korp","horario":"2026-09-03T14:46:52Z"}
 ```
 
-#### Validar isolamento da aplicação (porta 8080 não deve responder no host)
+#### Acompanhar os logs da aplicação
 
 ```bash
-curl -i http://localhost:8080/projeto-korp
-# Esperado: Falha de conexão (porta 8080 recusada no host)
-```
-
-#### Acompanhar logs dos containers
-
-```bash
-# Todos os serviços
-docker compose logs -f
-
-# Apenas o proxy NGINX
-docker compose logs -f nginx
-
-# Apenas o servidor Go
 docker compose logs -f http-server-projeto-korp
 ```
  
@@ -255,7 +252,7 @@ docker compose down
  
 ---
  
-## 8. Estrutura do Projeto
+## 7. Estrutura do Projeto
  
 ```text
 .
@@ -305,7 +302,7 @@ docker compose down
  
 ---
 
-## 7. Roteiro de Validação e Resolução de Problemas (Troubleshooting)
+## 8. Roteiro de Validação e Resolução de Problemas (Troubleshooting)
 
 ### Validação de fluxo operacional ponta a ponta
 
@@ -361,27 +358,7 @@ docker compose down
 
 ---
 
-## 8. Agentes e Skills do Projeto
-
-As instruções locais para agentes ficam em `.agents/`. O ambiente esperado para a evolução do desafio inclui Docker, Docker Compose, Go, Ansible e Git.
- 
-Agentes especializados:
- 
-- `container-agent`: Docker, Docker Compose e redes Docker.
-- `reverse-proxy-agent`: NGINX como proxy reverso.
-- `observability-agent`: Prometheus, Grafana, alertas e provisioning.
-- `infrastructure-agent`: Ansible, Linux/Shell e YAML de infraestrutura.
-- `go-http-agent`: servidores HTTP e APIs em Go.
- 
-Skills disponíveis em `.agents/skills/`:
- 
-`go-http-server`, `docker`, `docker-compose`, `docker-networking`, `nginx-reverse-proxy`, `prometheus`, `grafana`, `observability`, `grafana-provisioning`, `ansible`, `linux-shell` e `yaml-infrastructure`.
-
-As skills de infraestrutura foram criadas localmente após a verificação nominal da página [skills.sh/trending](https://www.skills.sh/trending), que não listava essas áreas no momento da configuração. CI/CD não foi adicionado porque permanece condicional no plano do desafio.
-
----
-
-## 11. Automação de Infraestrutura com Ansible (Parte 3)
+## 9. Automação de Infraestrutura com Ansible (Parte 3)
 
 Toda a plataforma (Docker, aplicação Go, NGINX como proxy reverso, Prometheus e Grafana provisionado) pode ser provisionada e configurada de forma totalmente automatizada, idempotente e reproduzível através do Ansible.
 
@@ -469,7 +446,7 @@ ok: [localhost] => {
 
 ---
 
-## 12. Guia de Testes e Validação Completa
+## 10. Guia de Testes e Validação Completa
 
 A plataforma possui testes automatizados e procedimentos de verificação operacional para cada camada da arquitetura:
 
@@ -510,4 +487,3 @@ korp:errors:rate1m
 
 O dashboard provisionado do Grafana permanece como a interface principal para
 visualização histórica dessas métricas.
-
