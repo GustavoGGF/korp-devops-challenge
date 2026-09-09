@@ -56,6 +56,7 @@ docker-compose.override.yml
 *.retry
 .ansible/
 ansible.log
+ansible/group_vars/vault.yml
 
 # ==============================================================================
 # Dados locais e volumes de observabilidade (Prometheus / Grafana)

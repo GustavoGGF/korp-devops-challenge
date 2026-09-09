@@ -71,6 +71,17 @@
   notify: Restart stack
   tags: [application]
 
+- name: Renderizar arquivo protegido de ambiente do Grafana
+  ansible.builtin.template:
+    src: grafana.env.j2
+    dest: "{{ application_grafana_env_file_dest }}"
+    owner: "{{ file_owner }}"
+    group: "{{ file_group }}"
+    mode: "0600"
+  no_log: true
+  notify: Restart stack
+  tags: [application, grafana]
+
 - name: Renderizar especificação docker compose da plataforma
   ansible.builtin.template:
     src: compose.yaml.j2
@@ -78,8 +89,12 @@
     owner: "{{ file_owner }}"
     group: "{{ file_group }}"
     mode: "0644"
-    validate: "docker compose -f %s config"
-  notify:
-    - Validate compose configuration
-    - Restart stack
+  notify: Restart stack
+  tags: [application]
+
+- name: Validar especificação docker compose renderizada
+  ansible.builtin.command:
+    cmd: "docker compose -f {{ application_compose_file_dest }} config"
+  changed_when: false
+  no_log: true
   tags: [application]
