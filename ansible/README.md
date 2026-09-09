@@ -47,7 +47,9 @@ ansible/
 │   │   ├── defaults/main.yml
 │   │   ├── handlers/main.yml
 │   │   ├── tasks/main.yml
-│   │   └── templates/compose.yaml.j2
+│   │   └── templates/
+│   │       ├── compose.yaml.j2
+│   │       └── grafana.env.j2
 │   ├── nginx/                            # Configuração de proxy reverso e headers defensivos
 │   │   ├── defaults/main.yml
 │   │   ├── handlers/main.yml
@@ -115,6 +117,38 @@ localhost ansible_connection=local ansible_python_interpreter=/usr/bin/python3
 ansible-playbook -i ansible/inventory/hosts.ini ansible/site.yml --syntax-check
 ```
 
+### Credenciais do Grafana
+
+O modo padrão é `development`, com a credencial de laboratório `admin/admin`.
+O playbook resolve a senha nesta ordem: `vault_grafana_admin_password`,
+`GRAFANA_ADMIN_PASSWORD` no ambiente do control node e, somente em
+desenvolvimento, o fallback `admin`.
+
+Para um deploy de produção usando variável protegida:
+
+```bash
+export GRAFANA_ADMIN_PASSWORD='uma-senha-segura'
+ansible-playbook -i ansible/inventory/hosts.ini ansible/site.yml \
+  -e deployment_environment=production
+```
+
+Em produção, a execução falha sem uma senha externa, com a senha `admin` ou
+com uma senha menor que o mínimo configurado. Para usar Ansible Vault:
+
+```bash
+ansible-vault create ansible/group_vars/vault.yml
+# No arquivo do Vault:
+# vault_grafana_admin_password: uma-senha-segura
+
+ansible-playbook -i ansible/inventory/hosts.ini ansible/site.yml \
+  -e deployment_environment=production --ask-vault-pass
+```
+
+O arquivo remoto `/opt/korp/.grafana.env` é criado pelo playbook com owner e
+group `root`, modo `0600` e as variáveis consumidas pelo serviço Grafana. O
+`compose.yaml` gerado referencia esse arquivo via `env_file` e não contém a
+senha. A task que renderiza o segredo usa `no_log`.
+
 ### Execução Completa (Comando Oficial)
 ```bash
 ansible-playbook -i ansible/inventory/hosts.ini ansible/site.yml
@@ -160,8 +194,9 @@ ok: [localhost] => {
 
 - **Idempotência**: Uma segunda execução sequencial do playbook não altera arquivos nem recria containers se as configurações não tiverem sido modificadas (`changed=0` nas tasks de estado).
 - **Backups**: Alterações no template NGINX criam backups automáticos da configuração anterior antes de aplicar novas diretivas.
-- **Segurança de Segredos**: Credenciais como `GF_SECURITY_ADMIN_PASSWORD` são parametrizáveis e nunca versionadas em texto simples. Em produção, use `ansible-vault`:
+- **Segurança de Segredos**: Credenciais como `GF_SECURITY_ADMIN_PASSWORD` são parametrizáveis e nunca versionadas em texto simples. Em produção, use `ansible-vault` ou `GRAFANA_ADMIN_PASSWORD` protegido; o playbook rejeita o fallback público.
   ```bash
   ansible-vault create ansible/group_vars/vault.yml
   ```
 - **Persistência de Dados**: Volumes Docker do Prometheus e Grafana (`korp-prometheus-data`, `korp-grafana-data`) são preservados durante atualizações e deploys normais.
+- **Rotação e recuperação**: Alterar `GRAFANA_ADMIN_PASSWORD` ou o Vault não altera automaticamente a senha de um Grafana já inicializado. Troque-a pela interface do Grafana ou pelo comando oficial de reset, atualize o segredo e reinicie o serviço sem remover o volume. `docker compose down -v` fica reservado para reset destrutivo de laboratório.

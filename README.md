@@ -2,6 +2,38 @@
 
 Serviço HTTP em Go desenvolvido como parte do desafio técnico Korp DevOps. O serviço expõe o endpoint de negócio `/projeto-korp`, endpoints operacionais de observabilidade (`/healthz` e `/metrics`), coleta automatizada via **Prometheus** e visualização em dashboard declarativo via **Grafana**, orquestrados via **Docker Compose**.
 
+## Início rápido
+
+### Execução local
+
+```bash
+cp .env.example .env
+docker compose up --build -d
+```
+
+Abra `http://localhost:3000` e use `admin/admin`, salvo se alterar as variáveis
+no arquivo `.env`. Veja [Credenciais do Grafana](#credenciais-do-grafana) para
+persistência e rotação da senha.
+
+### Deploy com Ansible
+
+Desenvolvimento:
+
+```bash
+ansible-playbook -i ansible/inventory/hosts.ini ansible/site.yml
+```
+
+Produção:
+
+```bash
+export GRAFANA_ADMIN_PASSWORD='uma-senha-segura'
+ansible-playbook -i ansible/inventory/hosts.ini ansible/site.yml \
+  -e deployment_environment=production
+```
+
+O uso de Ansible Vault e as validações de produção estão descritos no
+[README do Ansible](ansible/README.md).
+
 ---
 
 ## 1. Visão Geral e Arquitetura
@@ -86,8 +118,12 @@ O ambiente completo de aplicação e observabilidade é orquestrado via `compose
 ### Subir o ambiente
 
 ```bash
+cp .env.example .env
 docker compose up --build -d
 ```
+
+O arquivo `.env` é opcional e está ignorado pelo Git. Ajuste-o antes de subir a
+stack se quiser credenciais diferentes das credenciais de laboratório.
 
 ### Serviços expostos
 
@@ -95,7 +131,7 @@ docker compose up --build -d
 |---|---|---|---|
 | `http-server-projeto-korp` | `8080` | `http://localhost:8080` | Aplicação Go |
 | `prometheus` | `9090` | `http://localhost:9090` | Servidor Prometheus v3.2.1 |
-| `grafana` | `3000` | `http://localhost:3000` | Painéis Grafana v11.5.2 (user: `admin`, pass: `admin`) |
+| `grafana` | `3000` | `http://localhost:3000` | Painéis Grafana v11.5.2 |
 
 ### Verificar estado dos containers
 
@@ -114,6 +150,26 @@ Para remover também os volumes persistentes (`prometheus-data` e `grafana-data`
 ```bash
 docker compose down -v
 ```
+
+### Credenciais do Grafana
+
+No Compose local, o fallback explícito de desenvolvimento é `admin/admin`.
+Para configurar outro usuário ou senha, copie `.env.example` para `.env` e
+altere `GRAFANA_ADMIN_USER` e `GRAFANA_ADMIN_PASSWORD`. O arquivo `.env` não
+deve ser versionado e esses valores não devem ser usados em produção.
+
+Na primeira inicialização do volume `grafana-data`, o Grafana cria o usuário
+administrador. Com `admin/admin`, ele pode solicitar a troca da senha no
+primeiro acesso; uma senha customizada via `.env` pode não exibir essa tela.
+Alterar a variável depois que o volume já existe não altera a senha armazenada.
+
+`docker compose down` preserva os dados e a credencial. Use
+`docker compose down -v` somente para um reset destrutivo de laboratório, pois
+ele remove `grafana-data` e `prometheus-data`.
+
+Para rotação normal, altere o segredo, troque a senha pela interface do Grafana
+ou pelo comando oficial de reset, reinicie o serviço e mantenha o volume
+existente.
 
 ---
 
@@ -245,6 +301,7 @@ docker compose down
 ├── cmd/
 │   └── http-server-projeto-korp/
 │       └── main.go                  # Ponto de entrada e graceful shutdown
+├── .env.example                      # Exemplo de credenciais locais do Grafana
 ├── compose.yaml                     # Orquestração da stack Go + Prometheus + Grafana
 ├── deploy/
 │   ├── grafana/
@@ -464,4 +521,3 @@ korp:errors:rate1m
 
 O dashboard provisionado do Grafana permanece como a interface principal para
 visualização histórica dessas métricas.
-
