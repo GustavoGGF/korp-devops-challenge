@@ -129,7 +129,7 @@ Para um deploy de produção usando variável protegida:
 ```bash
 export GRAFANA_ADMIN_PASSWORD='uma-senha-segura'
 ansible-playbook -i ansible/inventory/hosts.ini ansible/site.yml \
-  -e deployment_environment=production
+  -e deployment_environment=production --ask-become-pass
 ```
 
 Em produção, a execução falha sem uma senha externa, com a senha `admin` ou
@@ -151,8 +151,13 @@ senha. A task que renderiza o segredo usa `no_log`.
 
 ### Execução Completa (Comando Oficial)
 ```bash
-ansible-playbook -i ansible/inventory/hosts.ini ansible/site.yml
+ansible-playbook -i ansible/inventory/hosts.ini ansible/site.yml --ask-become-pass
 ```
+
+O playbook usa `become: true` por padrão porque instala/configura o Docker e
+os serviços da plataforma com privilégios de superusuário. A opção
+`--ask-become-pass` (ou `-K`) solicita a senha do `sudo`; ela pode ser omitida
+quando o usuário já possui sudo sem senha.
 
 ### Execução com Tags Específicas
 Você pode isolar tarefas utilizando tags:

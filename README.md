@@ -20,15 +20,20 @@ persistência e rotação da senha.
 Desenvolvimento:
 
 ```bash
-ansible-playbook -i ansible/inventory/hosts.ini ansible/site.yml
+ansible-playbook -i ansible/inventory/hosts.ini ansible/site.yml --ask-become-pass
 ```
+
+Como o playbook precisa de privilégios de `sudo` para instalar/configurar o
+Docker e os serviços da plataforma, `--ask-become-pass` (ou `-K`) solicita a
+senha do usuário no início da execução. Em um host configurado com sudo sem
+senha, esse parâmetro pode ser omitido.
 
 Produção:
 
 ```bash
 export GRAFANA_ADMIN_PASSWORD='uma-senha-segura'
 ansible-playbook -i ansible/inventory/hosts.ini ansible/site.yml \
-  -e deployment_environment=production
+  -e deployment_environment=production --ask-become-pass
 ```
 
 O uso de Ansible Vault e as validações de produção estão descritos no
