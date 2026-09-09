@@ -268,10 +268,25 @@ korp-devops-challenge-nginx-1                      nginx:1.27-alpine            
 ```
  
 #### Testar a configuração do NGINX dentro do container
- 
+
+Se a plataforma foi provisionada com Ansible, use o `compose.yaml` gerado em
+`/opt/korp`:
+
 ```bash
-docker compose exec nginx nginx -t
+docker compose -f /opt/korp/compose.yaml exec nginx nginx -t
 ```
+
+Como alternativa, como o container possui o nome fixo `nginx`, o teste pode
+ser executado de qualquer diretório com:
+
+```bash
+docker exec nginx nginx -t
+```
+
+O `compose.yaml` da raiz é usado pelo ambiente local e não declara o serviço
+`nginx`; portanto, `docker compose exec nginx nginx -t` só funciona quando o
+comando é executado no diretório que contém o Compose usado para subir o
+container.
  
 #### Smoke test oficial (porta 80)
  
@@ -284,10 +299,11 @@ Exemplo de resposta:
 HTTP/1.1 200 OK
 Server: nginx/1.27.5
 Content-Type: application/json
+```
 
-## 6. Estrutura do Projeto
+#### Acompanhar os logs da aplicação
 
-# Apenas o servidor Go
+```bash
 docker compose logs -f http-server-projeto-korp
 ```
  
