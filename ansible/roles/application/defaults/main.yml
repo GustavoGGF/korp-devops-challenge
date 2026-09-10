@@ -1,3 +1,5 @@
 ---
 application_build_context: "{{ app_base_dir }}/app"
 application_compose_file_dest: "{{ app_base_dir }}/compose.yaml"
+application_grafana_env_file_name: .grafana.env
+application_grafana_env_file_dest: "{{ app_base_dir }}/{{ application_grafana_env_file_name }}"

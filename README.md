@@ -2,6 +2,43 @@
 
 Serviço HTTP em Go desenvolvido como parte do desafio técnico Korp DevOps. O serviço expõe o endpoint de negócio `/projeto-korp`, endpoints operacionais de observabilidade (`/healthz` e `/metrics`), coleta automatizada via **Prometheus** e visualização em dashboard declarativo via **Grafana**, orquestrados via **Docker Compose**.
 
+## Início rápido
+
+### Execução local
+
+```bash
+cp .env.example .env
+docker compose up --build -d
+```
+
+Abra `http://localhost:3000` e use `admin/admin`, salvo se alterar as variáveis
+no arquivo `.env`. Veja [Credenciais do Grafana](#credenciais-do-grafana) para
+persistência e rotação da senha.
+
+### Deploy com Ansible
+
+Desenvolvimento:
+
+```bash
+ansible-playbook -i ansible/inventory/hosts.ini ansible/site.yml --ask-become-pass
+```
+
+Como o playbook precisa de privilégios de `sudo` para instalar/configurar o
+Docker e os serviços da plataforma, `--ask-become-pass` (ou `-K`) solicita a
+senha do usuário no início da execução. Em um host configurado com sudo sem
+senha, esse parâmetro pode ser omitido.
+
+Produção:
+
+```bash
+export GRAFANA_ADMIN_PASSWORD='uma-senha-segura'
+ansible-playbook -i ansible/inventory/hosts.ini ansible/site.yml \
+  -e deployment_environment=production --ask-become-pass
+```
+
+O uso de Ansible Vault e as validações de produção estão descritos no
+[README do Ansible](ansible/README.md).
+
 ---
 
 ## 1. Visão Geral e Arquitetura
@@ -99,8 +136,12 @@ cp .env.example .env
 ### Subir o ambiente
 
 ```bash
+cp .env.example .env
 docker compose up --build -d
 ```
+
+O arquivo `.env` é opcional e está ignorado pelo Git. Ajuste-o antes de subir a
+stack se quiser credenciais diferentes das credenciais de laboratório.
 
 ### Serviços expostos
 
@@ -108,7 +149,7 @@ docker compose up --build -d
 |---|---|---|---|
 | `http-server-projeto-korp` | `8080` | `http://localhost:8080` | Aplicação Go |
 | `prometheus` | `9090` | `http://localhost:9090` | Servidor Prometheus v3.2.1 |
-| `grafana` | `3000` | `http://localhost:3000` | Painéis Grafana v11.5.2 (credencial definida via Vault ou `.env`) |
+| `grafana` | `3000` | `http://localhost:3000` | Painéis Grafana v11.5.2 |
 
 ### Verificar estado dos containers
 
@@ -127,6 +168,26 @@ Para remover também os volumes persistentes (`prometheus-data` e `grafana-data`
 ```bash
 docker compose down -v
 ```
+
+### Credenciais do Grafana
+
+No Compose local, o fallback explícito de desenvolvimento é `admin/admin`.
+Para configurar outro usuário ou senha, copie `.env.example` para `.env` e
+altere `GRAFANA_ADMIN_USER` e `GRAFANA_ADMIN_PASSWORD`. O arquivo `.env` não
+deve ser versionado e esses valores não devem ser usados em produção.
+
+Na primeira inicialização do volume `grafana-data`, o Grafana cria o usuário
+administrador. Com `admin/admin`, ele pode solicitar a troca da senha no
+primeiro acesso; uma senha customizada via `.env` pode não exibir essa tela.
+Alterar a variável depois que o volume já existe não altera a senha armazenada.
+
+`docker compose down` preserva os dados e a credencial. Use
+`docker compose down -v` somente para um reset destrutivo de laboratório, pois
+ele remove `grafana-data` e `prometheus-data`.
+
+Para rotação normal, altere o segredo, troque a senha pela interface do Grafana
+ou pelo comando oficial de reset, reinicie o serviço e mantenha o volume
+existente.
 
 ---
 
@@ -220,10 +281,25 @@ korp-devops-challenge-nginx-1                      nginx:1.27-alpine            
 ```
  
 #### Testar a configuração do NGINX dentro do container
- 
+
+Se a plataforma foi provisionada com Ansible, use o `compose.yaml` gerado em
+`/opt/korp`:
+
 ```bash
-docker compose exec nginx nginx -t
+docker compose -f /opt/korp/compose.yaml exec nginx nginx -t
 ```
+
+Como alternativa, como o container possui o nome fixo `nginx`, o teste pode
+ser executado de qualquer diretório com:
+
+```bash
+docker exec nginx nginx -t
+```
+
+O `compose.yaml` da raiz é usado pelo ambiente local e não declara o serviço
+`nginx`; portanto, `docker compose exec nginx nginx -t` só funciona quando o
+comando é executado no diretório que contém o Compose usado para subir o
+container.
  
 #### Smoke test oficial (porta 80)
  
@@ -238,12 +314,6 @@ Server: nginx/1.27.5
 Content-Type: application/json
 ```
 
-#### Acompanhar os logs da aplicação
-
-```bash
-docker compose logs -f http-server-projeto-korp
-```
- 
 #### Encerrar o ambiente
  
 ```bash
@@ -267,7 +337,8 @@ docker compose down
 ├── cmd/
 │   └── http-server-projeto-korp/
 │       └── main.go                  # Ponto de entrada e graceful shutdown
-├── compose.yaml                     # Orquestração multi-container da stack completa
+├── .env.example                      # Exemplo de credenciais locais do Grafana
+├── compose.yaml                     # Orquestração da stack Go + Prometheus + Grafana
 ├── deploy/
 │   ├── grafana/
 │   │   ├── dashboards/
@@ -306,19 +377,34 @@ docker compose down
 
 ### Validação de fluxo operacional ponta a ponta
 
+> **Importante:** em uma instalação provisionada com Ansible/NGINX, a aplicação
+> Go escuta na porta `8080` somente dentro da rede Docker. A porta publicada no
+> host é a `80`, pelo NGINX. Os comandos abaixo consideram esse ambiente. Para a
+> execução local sem NGINX, usando o `compose.yaml` da raiz, a aplicação também
+> pode ser acessada diretamente em `http://localhost:8080`.
+
 1. **Subir a stack**:
    ```bash
-   docker compose up --build -d
+   # Ambiente provisionado pelo Ansible
+   docker compose -f /opt/korp/compose.yaml up -d --build
+
+   # Ou, se estiver operando o Compose local da raiz:
+   # docker compose up --build -d
    ```
 
 2. **Verificar contratos via curl**:
    ```bash
-   # Saúde
-   curl -fsS http://localhost:8080/healthz
-   # Métricas
-   curl -fsS http://localhost:8080/metrics | grep http_requests_total
-   # Negócio
-   curl -fsS http://localhost:8080/projeto-korp
+   # Negócio via NGINX (porta publicada no host)
+   curl -fsS http://localhost:80/projeto-korp
+
+   # Saúde diretamente na aplicação (porta interna do container)
+   docker exec http-server-projeto-korp \
+     wget -qO- http://localhost:8080/healthz
+
+   # Métricas diretamente na aplicação
+   docker exec http-server-projeto-korp \
+     wget -qO- http://localhost:8080/metrics | grep http_requests_total
+
    # Prometheus
    curl -fsS http://localhost:9090/-/ready
    # Grafana
@@ -327,34 +413,50 @@ docker compose down
 
 3. **Gerar tráfego para observação**:
    ```bash
-   for i in {1..20}; do curl -s http://localhost:8080/projeto-korp > /dev/null; done
-   for i in {1..5}; do curl -s -X POST http://localhost:8080/projeto-korp > /dev/null; done
-   for i in {1..5}; do curl -s http://localhost:8080/rota-invalida > /dev/null; done
+   for i in {1..20}; do curl -s http://localhost:80/projeto-korp > /dev/null; done
+   for i in {1..5}; do curl -s -X POST http://localhost:80/projeto-korp > /dev/null; done
+
+   # A rota desconhecida não é publicada pelo NGINX; execute-a diretamente
+   # na aplicação para gerar a métrica not_found.
+   for i in {1..5}; do
+     docker exec http-server-projeto-korp \
+       wget -qO- http://localhost:8080/rota-invalida > /dev/null 2>&1 || true
+   done
    ```
 
 4. **Consultar série `up` no Prometheus**:
    ```bash
-   curl -s 'http://localhost:9090/api/v1/query?query=up' | grep -o '"value":\[[0-9.]*,"[0-9]"\]'
+   curl -sG http://localhost:9090/api/v1/query \
+     --data-urlencode 'query=up' \
+     | grep -o '"value":\[[0-9.]*,"[0-9]"\]'
    ```
 
 ### Simulação de Falha e Recuperação (Disponibilidade)
 
 1. **Simular queda da aplicação**:
    ```bash
-   docker compose stop http-server-projeto-korp
+   # Use o mesmo arquivo Compose usado no provisionamento da stack.
+   docker compose -f /opt/korp/compose.yaml stop http-server-projeto-korp
    ```
 2. **Observar indisponibilidade no Prometheus**:
-   Após o scrape seguinte, `up{job="http-server-projeto-korp"}` passa para `0`.
+   Aguarde o próximo scrape (até aproximadamente 10 segundos). Depois, a série
+   `up{job="http-server-projeto-korp"}` deve passar para `0`.
    ```bash
-   curl -s 'http://localhost:9090/api/v1/query?query=up{job="http-server-projeto-korp"}'
+   curl -sG http://localhost:9090/api/v1/query \
+     --data-urlencode 'query=up{job="http-server-projeto-korp"}'
    ```
 3. **Observar alerta**:
    A regra `ServiceDown` entra no estado `pending` e posteriormente `firing` se a parada ultrapassar 1 minuto.
 4. **Recuperar serviço**:
    ```bash
-   docker compose start http-server-projeto-korp
+   docker compose -f /opt/korp/compose.yaml start http-server-projeto-korp
    ```
-   O target retorna ao estado `UP` (`up=1`) e o painel do Grafana volta ao status `ONLINE`.
+   Após o próximo scrape, o target retorna ao estado `UP` (`up=1`) e o painel do
+   Grafana volta ao status `ONLINE`.
+
+   Para uma execução local sem NGINX, substitua `-f /opt/korp/compose.yaml` por
+   `-f compose.yaml` (ou execute os comandos no diretório que contém o Compose
+   usado para subir a stack).
 
 ---
 
@@ -448,29 +550,25 @@ ok: [localhost] => {
 
 ## 10. Guia de Testes e Validação Completa
 
-A plataforma possui testes automatizados e procedimentos de verificação operacional para cada camada da arquitetura:
+Os testes automatizados disponíveis no repositório são testes unitários em Go:
 
-- **Testes Unitários Go (com detector de race conditions)**:
-  ```bash
-  go test -v -race ./...
-  ```
-- **Suíte de Testes Automatizada de Handlers Ansible (7 cenários)**:
-  ```bash
-  ./tests/test_ansible_handlers.sh
-  ```
-- **Validação Sintática do NGINX no Container**:
-  ```bash
-  docker compose exec -T nginx nginx -t
-  ```
-- **Validação de Configuração e Alertas do Prometheus via Promtool**:
-  ```bash
-  docker compose exec -T prometheus promtool check config /etc/prometheus/prometheus.yml
-  docker compose exec -T prometheus promtool check rules /etc/prometheus/rules/alerts.yml
-  ```
-- **Smoke Test Oficial de Negócio via Proxy Reverso**:
-  ```bash
-  curl -i http://localhost:80/projeto-korp
-  ```
+- `tests/unit/internal/transport/http/handler_test.go`: contratos do endpoint
+  `/projeto-korp`, incluindo resposta JSON, horário UTC, métodos não permitidos
+  e rotas inexistentes;
+- `tests/unit/internal/transport/http/metrics_test.go`: `/healthz`, exposição de
+  métricas, contadores, cardinalidade e isolamento do registry Prometheus.
+
+Para executar os testes e as validações da aplicação:
+
+```bash
+go test -v -race ./...
+gofmt -l .
+go vet ./...
+docker compose config
+```
+
+As validações específicas do Prometheus, NGINX e Ansible estão descritas nas
+seções correspondentes deste README.
 
 ### Queries Prometheus úteis
 

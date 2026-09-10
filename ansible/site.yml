@@ -9,12 +9,13 @@
   gather_facts: true
 
   pre_tasks:
-    - name: Carregar cofre Ansible Vault se disponível
+    - name: Carregar credenciais opcionais do Ansible Vault
       ansible.builtin.include_vars:
         file: "{{ playbook_dir }}/group_vars/vault.yml"
-      failed_when: false
+      when:
+        - lookup('ansible.builtin.fileglob', playbook_dir ~ '/group_vars/vault.yml', wantlist=True) | length > 0
       no_log: true
-      tags: [pre_check, validation]
+      tags: [always]
 
     - name: Validar privilégios de superusuário (become)
       ansible.builtin.assert:
@@ -34,24 +35,35 @@
           - nginx_http_port is defined
           - prometheus_http_port is defined
           - grafana_http_port is defined
+          - deployment_environment is defined
+          - grafana_admin_user is defined
+          - grafana_admin_password is defined
+          - grafana_admin_password_min_length is defined
         fail_msg: "Variáveis obrigatórias da plataforma não estão devidamente definidas em group_vars."
         success_msg: "Variáveis essenciais validadas com sucesso."
       tags: [pre_check, validation]
 
-    - name: Validar credencial administrativa do Grafana (sem fallback)
+    - name: Validar política de credenciais do Grafana
       ansible.builtin.assert:
         that:
-          - grafana_admin_password is defined
-          - grafana_admin_password | length > 0
-          - grafana_admin_password != 'admin'
-          - grafana_admin_password != 'AdminSecure#2026'
-        fail_msg: >-
-          A senha administrativa do Grafana (grafana_admin_password) é obrigatória e não pode ser vazia,
-          nem conter valores conhecidos ou inseguros ('admin' ou 'AdminSecure#2026').
-          Forneça-a via Ansible Vault (ansible/group_vars/vault.yml) ou pela variável GRAFANA_ADMIN_PASSWORD.
-        success_msg: "Credencial administrativa do Grafana validada com sucesso."
+          - deployment_environment | lower in ['development', 'production']
+          - grafana_admin_user | string | length > 0
+          - >-
+            grafana_admin_password == 'admin' or
+            (grafana_admin_password | string | length >= grafana_admin_password_min_length)
+          - >-
+            deployment_environment | lower == 'development' or
+            grafana_admin_password != 'admin'
+          - >-
+            deployment_environment | lower != 'production' or
+            (
+              (vault_grafana_admin_password | default('', true) | string | trim | length > 0) or
+              (lookup('env', 'GRAFANA_ADMIN_PASSWORD') | string | trim | length > 0)
+            )
+        fail_msg: "Política de credenciais do Grafana inválida para o ambiente selecionado."
+        success_msg: "Política de credenciais do Grafana validada."
       no_log: true
-      tags: [pre_check, validation]
+      tags: [always, pre_check, validation, grafana]
 
     - name: Criar diretório raiz de instalação com permissões seguras
       ansible.builtin.file:

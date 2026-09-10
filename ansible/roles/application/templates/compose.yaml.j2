@@ -70,9 +70,7 @@ services:
     ports:
       - "{{ grafana_bind_ip }}:{{ grafana_http_port }}:3000"
     env_file:
-      - {{ grafana_env_file | default(app_base_dir ~ '/grafana/grafana.env') }}
-    environment:
-      - GF_USERS_ALLOW_SIGN_UP=false
+      - {{ application_grafana_env_file_name }}
     volumes:
       - {{ app_base_dir }}/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
       - {{ app_base_dir }}/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro

@@ -1,9 +1,4 @@
 ---
-- name: Validate compose configuration
-  ansible.builtin.command:
-    cmd: "docker compose -f {{ application_compose_file_dest | default(compose_file_dest) }} config"
-  changed_when: false
-
 - name: Restart stack
   ansible.builtin.command:
     cmd: "docker compose -f {{ application_compose_file_dest | default(compose_file_dest) }} up -d --remove-orphans"
