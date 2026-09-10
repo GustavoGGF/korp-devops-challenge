@@ -163,10 +163,10 @@ quando o usuário já possui sudo sem senha.
 Você pode isolar tarefas utilizando tags:
 ```bash
 # Apenas validação inicial e instalação do Docker
-ansible-playbook -i ansible/inventory/hosts.ini ansible/site.yml --tags docker
+ansible-playbook -i ansible/inventory/hosts.ini ansible/site.yml --tags docker --ask-vault-pass
 
 # Apenas deploy da aplicação e proxy
-ansible-playbook -i ansible/inventory/hosts.ini ansible/site.yml --tags application,nginx
+ansible-playbook -i ansible/inventory/hosts.ini ansible/site.yml --tags application,nginx --ask-vault-pass
 
 # Apenas smoke test
 ansible-playbook -i ansible/inventory/hosts.ini ansible/site.yml --tags smoke_test
@@ -176,7 +176,8 @@ ansible-playbook -i ansible/inventory/hosts.ini ansible/site.yml --tags smoke_te
 
 ## 6. Smoke Test e Validação de Aceite
 
-No final da execução, o playbook executa automaticamente o smoke test contra `http://127.0.0.1/projeto-korp`, validando:
+No final da execução, o playbook executa automaticamente o smoke test contra `http://127.0.0.1/projeto-
+`, validando:
 - Status HTTP `200 OK`
 - Cabeçalho `Content-Type: application/json`
 - Propriedade `nome: "Projeto Korp"`
@@ -198,6 +199,10 @@ ok: [localhost] => {
 ## 7. Idempotência e Segurança
 
 - **Idempotência**: Uma segunda execução sequencial do playbook não altera arquivos nem recria containers se as configurações não tiverem sido modificadas (`changed=0` nas tasks de estado).
+- **Resiliência e Fail-Fast dos Handlers**: Os handlers de recarregamento (`Reload nginx` e `Reload prometheus`) não mascaram falhas (`failed_when: false` eliminado). Se uma recarga falhar ou o serviço estiver inacessível, o Ansible interrompe o playbook imediatamente. Para tolerar períodos transitórios de subida ou rede, ambos contam com política de retries (`retries: 3`, `delay: 2`).
+- **Validação Sintática Preventiva**: Antes de acionar qualquer reload, as tasks executam checagem sintática ativa diretamente no container:
+  - NGINX: `docker compose exec -T nginx nginx -t`
+  - Prometheus: `docker compose exec -T prometheus promtool check config /etc/prometheus/prometheus.yml`
 - **Backups**: Alterações no template NGINX criam backups automáticos da configuração anterior antes de aplicar novas diretivas.
 - **Segurança de Segredos**: Credenciais como `GF_SECURITY_ADMIN_PASSWORD` são parametrizáveis e nunca versionadas em texto simples. Em produção, use `ansible-vault` ou `GRAFANA_ADMIN_PASSWORD` protegido; o playbook rejeita o fallback público.
   ```bash

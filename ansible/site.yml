@@ -78,9 +78,6 @@
     - role: docker
       tags: [docker]
 
-    - role: application
-      tags: [application]
-
     - role: nginx
       tags: [nginx]
 
@@ -89,6 +86,9 @@
 
     - role: grafana
       tags: [grafana]
+
+    - role: application
+      tags: [application]
 
   post_tasks:
     - name: Iniciar e convergir todos os containers da plataforma via Compose

@@ -78,6 +78,8 @@ jobs:
     name: Docker Compose Integration Test
     needs: test-and-lint
     runs-on: ubuntu-latest
+    env:
+      GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD || 'CiIntegrationSecureGrafanaPass2026!' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -104,6 +106,23 @@ jobs:
           if [ $timeout -le 0 ]; then
             echo "Timeout aguardando healthcheck"
             docker compose logs
+            exit 1
+          fi
+
+          echo "Aguardando healthcheck do NGINX..."
+          timeout=30
+          while [ $timeout -gt 0 ]; do
+            STATUS=$(docker inspect --format='{{json .State.Health.Status}}' $(docker compose ps -q nginx) 2>/dev/null || echo "starting")
+            if [ "$STATUS" = "\"healthy\"" ]; then
+              echo "NGINX está saudável!"
+              break
+            fi
+            sleep 1
+            timeout=$((timeout - 1))
+          done
+          if [ $timeout -le 0 ]; then
+            echo "Timeout aguardando healthcheck do NGINX"
+            docker compose logs nginx
             exit 1
           fi
 
@@ -163,3 +182,41 @@ jobs:
       - name: Tear down Compose environment
         if: always()
         run: docker compose down
+
+  ansible-and-security-check:
+    name: Ansible & Security Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Ansible and Linters
+        run: pip install ansible-core ansible-lint
+
+      - name: Verify absence of plaintext secrets or fallbacks in repository
+        run: |
+          echo "Verificando ausência de credenciais em texto puro ou fallbacks..."
+          if git grep -E "AdminSecure#2026|admin/admin" -- \
+            ':!PLANO_REMEDIACAO_CREDENCIAL_GRAFANA.md' \
+            ':!ansible/site.yml' \
+            ':!.github/workflows/ci.yml' \
+            ':!scripts/verify_secret_remediation.sh'; then
+            echo "ERRO: Encontradas referências a senhas antigas ou fallbacks inseguros no repositório!"
+            exit 1
+          fi
+          echo "Nenhum segredo em texto puro encontrado."
+
+      - name: Verify vault encryption
+        run: |
+          head -n 1 ansible/group_vars/vault.yml | grep -q '^\$ANSIBLE_VAULT;' || {
+            echo "ERRO: ansible/group_vars/vault.yml não está criptografado com Ansible Vault!"
+            exit 1
+          }
+
+      - name: Ansible Syntax Check
+        run: ansible-playbook -i ansible/inventory/hosts.ini.example ansible/site.yml --syntax-check

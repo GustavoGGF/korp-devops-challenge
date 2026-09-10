@@ -1,0 +1,17 @@
+---
+# ==============================================================================
+# Exemplo de Arquivo de Segredos Protegido pelo Ansible Vault
+# ==============================================================================
+# Para criar o cofre seguro em produção:
+#   ansible-vault create ansible/group_vars/vault.yml
+#
+# Para editar um cofre existente:
+#   ansible-vault edit ansible/group_vars/vault.yml
+#
+# Para executar com o cofre solicitando senha interativamente:
+#   ansible-playbook -i ansible/inventory/hosts.ini ansible/site.yml --ask-vault-pass
+#
+# Para executar com arquivo de senha (ex: em automações seguras):
+#   ansible-playbook -i ansible/inventory/hosts.ini ansible/site.yml --vault-password-file /caminho/seguro/vault_pass
+# ==============================================================================
+grafana_admin_password: "<definir-senha-forte-e-exclusiva-aqui>"

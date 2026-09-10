@@ -120,6 +120,19 @@ Expõe métricas no formato padrão de texto do Prometheus:
 
 O ambiente completo de aplicação e observabilidade é orquestrado via `compose.yaml`.
 
+### Configuração de variáveis de ambiente (Desenvolvimento Local)
+
+Antes de iniciar os containers para desenvolvimento local ou laboratório, copie o arquivo de exemplo `.env.example` para `.env` e defina a senha administrativa do Grafana:
+
+```bash
+cp .env.example .env
+# Edite o arquivo .env e configure uma senha forte em GRAFANA_ADMIN_PASSWORD
+```
+
+> [!IMPORTANT]
+> O arquivo `.env` é destinado exclusivamente ao desenvolvimento local e laboratório.
+> Para implantações oficiais e produção, utilize sempre a automação com **Ansible Vault** (`ansible/site.yml`), que garante isolamento, permissões `0600` e criptografia das credenciais.
+
 ### Subir o ambiente
 
 ```bash
@@ -313,6 +326,14 @@ docker compose down
  
 ```text
 .
+├── .yamllint.yml                    # Regras de linting YAML padronizadas
+├── ansible/                         # Automação de infraestrutura e orquestração Ansible
+│   ├── ansible.cfg                  # Configurações do Ansible
+│   ├── group_vars/                  # Variáveis globais da plataforma
+│   ├── inventory/                   # Inventário de hosts gerenciados
+│   ├── requirements.yml             # Dependências de coleções Ansible
+│   ├── roles/                       # Roles: docker, application, nginx, monitoring, grafana
+│   └── site.yml                     # Playbook principal de orquestração
 ├── cmd/
 │   └── http-server-projeto-korp/
 │       └── main.go                  # Ponto de entrada e graceful shutdown
@@ -337,12 +358,16 @@ docker compose down
 │       └── http/
 │           ├── handler.go           # Roteamento de /projeto-korp, /healthz e /metrics
 │           └── metrics.go           # Middleware de telemetria e isolamento de registry
+├── nginx/
+│   └── conf.d/
+│       └── http-server-projeto-korp.conf      # VirtualHost do proxy reverso NGINX
 ├── tests/
+│   ├── test_ansible_handlers.sh     # Suíte automatizada de testes de resiliência de handlers
+│   ├── test_handlers.yml            # Playbook de isolamento para validação de handlers
 │   └── unit/
 │       └── internal/transport/http/
 │           ├── handler_test.go      # Testes unitários do endpoint de negócio
 │           └── metrics_test.go      # Testes de integridade, métricas e isolamento
-├── PLANO_IMPLEMENTACAO_MONITORAMENTO_OBSERVABILIDADE.md # Especificação da Parte 2
 └── README.md                        # Documentação da stack e guia operacional
 ```
  
@@ -517,7 +542,8 @@ ok: [localhost] => {
 
 - **Validação Sintática**: `ansible-playbook -i ansible/inventory/hosts.ini ansible/site.yml --syntax-check`
 - **Linting de Boas Práticas**: `ansible-lint ansible/site.yml` (Aprovado em nível `production`)
-- **Linting YAML**: `yamllint ansible/` (Zero erros/avisos)
+- **Linting YAML**: `yamllint ansible/ .yamllint.yml` (Regras padronizadas via `.yamllint.yml`, zero erros/avisos)
+- **Validação de Handlers e Resiliência**: `./tests/test_ansible_handlers.sh` (Suíte de 7 cenários cobrindo reload bem-sucedido, bloqueio de sintaxe inválida e fail-fast com container parado)
 - **Idempotência**: Uma segunda execução consecutiva mantém `changed=0` nas configurações.
 
 ---

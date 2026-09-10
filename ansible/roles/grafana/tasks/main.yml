@@ -18,6 +18,17 @@
     - "{{ grafana_dashboards_dir }}"
   tags: [grafana]
 
+- name: Provisionar arquivo de ambiente protegido do Grafana
+  ansible.builtin.template:
+    src: grafana.env.j2
+    dest: "{{ grafana_env_file | default(grafana_dir ~ '/grafana.env') }}"
+    owner: "{{ file_owner }}"
+    group: "{{ file_group }}"
+    mode: "0600"
+  no_log: true
+  notify: Restart grafana
+  tags: [grafana]
+
 - name: Provisionar datasource Prometheus no Grafana
   ansible.builtin.template:
     src: datasources.yml.j2
