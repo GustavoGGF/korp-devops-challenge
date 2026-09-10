@@ -352,19 +352,34 @@ docker compose down
 
 ### Validação de fluxo operacional ponta a ponta
 
+> **Importante:** em uma instalação provisionada com Ansible/NGINX, a aplicação
+> Go escuta na porta `8080` somente dentro da rede Docker. A porta publicada no
+> host é a `80`, pelo NGINX. Os comandos abaixo consideram esse ambiente. Para a
+> execução local sem NGINX, usando o `compose.yaml` da raiz, a aplicação também
+> pode ser acessada diretamente em `http://localhost:8080`.
+
 1. **Subir a stack**:
    ```bash
-   docker compose up --build -d
+   # Ambiente provisionado pelo Ansible
+   docker compose -f /opt/korp/compose.yaml up -d --build
+
+   # Ou, se estiver operando o Compose local da raiz:
+   # docker compose up --build -d
    ```
 
 2. **Verificar contratos via curl**:
    ```bash
-   # Saúde
-   curl -fsS http://localhost:8080/healthz
-   # Métricas
-   curl -fsS http://localhost:8080/metrics | grep http_requests_total
-   # Negócio
-   curl -fsS http://localhost:8080/projeto-korp
+   # Negócio via NGINX (porta publicada no host)
+   curl -fsS http://localhost:80/projeto-korp
+
+   # Saúde diretamente na aplicação (porta interna do container)
+   docker exec http-server-projeto-korp \
+     wget -qO- http://localhost:8080/healthz
+
+   # Métricas diretamente na aplicação
+   docker exec http-server-projeto-korp \
+     wget -qO- http://localhost:8080/metrics | grep http_requests_total
+
    # Prometheus
    curl -fsS http://localhost:9090/-/ready
    # Grafana
@@ -373,9 +388,15 @@ docker compose down
 
 3. **Gerar tráfego para observação**:
    ```bash
-   for i in {1..20}; do curl -s http://localhost:8080/projeto-korp > /dev/null; done
-   for i in {1..5}; do curl -s -X POST http://localhost:8080/projeto-korp > /dev/null; done
-   for i in {1..5}; do curl -s http://localhost:8080/rota-invalida > /dev/null; done
+   for i in {1..20}; do curl -s http://localhost:80/projeto-korp > /dev/null; done
+   for i in {1..5}; do curl -s -X POST http://localhost:80/projeto-korp > /dev/null; done
+
+   # A rota desconhecida não é publicada pelo NGINX; execute-a diretamente
+   # na aplicação para gerar a métrica not_found.
+   for i in {1..5}; do
+     docker exec http-server-projeto-korp \
+       wget -qO- http://localhost:8080/rota-invalida > /dev/null || true
+   done
    ```
 
 4. **Consultar série `up` no Prometheus**:
