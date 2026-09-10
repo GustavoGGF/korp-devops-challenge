@@ -524,13 +524,25 @@ ok: [localhost] => {
 
 ## 10. Guia de Testes e Validação Completa
 
-Para a lista detalhada de todos os comandos de teste com suas **saídas esperadas reais** (Go, Docker, NGINX, Prometheus, Grafana e Ansible), consulte o guia oficial:
+Os testes automatizados disponíveis no repositório são testes unitários em Go:
 
-- **Documentação de Testes**: [TESTES.md](file:///mnt/codes/korp-devops-challenge/TESTES.md)
-- **Script de Validação Automatizada (20 testes)**:
-  ```bash
-  ./tests/validate_platform.sh
-  ```
+- `tests/unit/internal/transport/http/handler_test.go`: contratos do endpoint
+  `/projeto-korp`, incluindo resposta JSON, horário UTC, métodos não permitidos
+  e rotas inexistentes;
+- `tests/unit/internal/transport/http/metrics_test.go`: `/healthz`, exposição de
+  métricas, contadores, cardinalidade e isolamento do registry Prometheus.
+
+Para executar os testes e as validações da aplicação:
+
+```bash
+go test -v -race ./...
+gofmt -l .
+go vet ./...
+docker compose config
+```
+
+As validações específicas do Prometheus, NGINX e Ansible estão descritas nas
+seções correspondentes deste README.
 
 ### Queries Prometheus úteis
 
