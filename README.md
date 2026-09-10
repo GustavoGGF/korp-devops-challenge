@@ -221,7 +221,7 @@ docker compose config
  
 ---
  
-## 7. Orquestração Multi-Container com Docker Compose e NGINX Reverse Proxy
+## 6. Orquestração Multi-Container com Docker Compose e NGINX Reverse Proxy
  
 O ambiente completo de produção simulada opera com dois containers orquestrados via `compose.yaml`:
  
@@ -309,7 +309,7 @@ docker compose down
  
 ---
  
-## 8. Estrutura do Projeto
+## 7. Estrutura do Projeto
  
 ```text
 .
@@ -348,7 +348,7 @@ docker compose down
  
 ---
 
-## 7. Roteiro de Validação e Resolução de Problemas (Troubleshooting)
+## 8. Roteiro de Validação e Resolução de Problemas (Troubleshooting)
 
 ### Validação de fluxo operacional ponta a ponta
 
@@ -404,7 +404,7 @@ docker compose down
 
 ---
 
-## 8. Agentes e Skills do Projeto
+## 9. Agentes e Skills do Projeto
 
 As instruções locais para agentes ficam em `.agents/`. O ambiente esperado para a evolução do desafio inclui Docker, Docker Compose, Go, Ansible e Git.
  
@@ -424,7 +424,7 @@ As skills de infraestrutura foram criadas localmente após a verificação nomin
 
 ---
 
-## 11. Automação de Infraestrutura com Ansible (Parte 3)
+## 10. Automação de Infraestrutura com Ansible (Parte 3)
 
 Toda a plataforma (Docker, aplicação Go, NGINX como proxy reverso, Prometheus e Grafana provisionado) pode ser provisionada e configurada de forma totalmente automatizada, idempotente e reproduzível através do Ansible.
 
@@ -511,7 +511,7 @@ ok: [localhost] => {
 
 ---
 
-## 12. Guia de Testes e Validação Completa
+## 11. Guia de Testes e Validação Completa
 
 Para a lista detalhada de todos os comandos de teste com suas **saídas esperadas reais** (Go, Docker, NGINX, Prometheus, Grafana e Ansible), consulte o guia oficial:
 
