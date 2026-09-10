@@ -395,13 +395,15 @@ docker compose down
    # na aplicação para gerar a métrica not_found.
    for i in {1..5}; do
      docker exec http-server-projeto-korp \
-       wget -qO- http://localhost:8080/rota-invalida > /dev/null || true
+       wget -qO- http://localhost:8080/rota-invalida > /dev/null 2>&1 || true
    done
    ```
 
 4. **Consultar série `up` no Prometheus**:
    ```bash
-   curl -s 'http://localhost:9090/api/v1/query?query=up' | grep -o '"value":\[[0-9.]*,"[0-9]"\]'
+   curl -sG http://localhost:9090/api/v1/query \
+     --data-urlencode 'query=up' \
+     | grep -o '"value":\[[0-9.]*,"[0-9]"\]'
    ```
 
 ### Simulação de Falha e Recuperação (Disponibilidade)
@@ -413,7 +415,8 @@ docker compose down
 2. **Observar indisponibilidade no Prometheus**:
    Após o scrape seguinte, `up{job="http-server-projeto-korp"}` passa para `0`.
    ```bash
-   curl -s 'http://localhost:9090/api/v1/query?query=up{job="http-server-projeto-korp"}'
+   curl -sG http://localhost:9090/api/v1/query \
+     --data-urlencode 'query=up{job="http-server-projeto-korp"}'
    ```
 3. **Observar alerta**:
    A regra `ServiceDown` entra no estado `pending` e posteriormente `firing` se a parada ultrapassar 1 minuto.
