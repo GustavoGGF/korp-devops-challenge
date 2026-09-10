@@ -410,10 +410,12 @@ docker compose down
 
 1. **Simular queda da aplicação**:
    ```bash
-   docker compose stop http-server-projeto-korp
+   # Use o mesmo arquivo Compose usado no provisionamento da stack.
+   docker compose -f /opt/korp/compose.yaml stop http-server-projeto-korp
    ```
 2. **Observar indisponibilidade no Prometheus**:
-   Após o scrape seguinte, `up{job="http-server-projeto-korp"}` passa para `0`.
+   Aguarde o próximo scrape (até aproximadamente 10 segundos). Depois, a série
+   `up{job="http-server-projeto-korp"}` deve passar para `0`.
    ```bash
    curl -sG http://localhost:9090/api/v1/query \
      --data-urlencode 'query=up{job="http-server-projeto-korp"}'
@@ -422,9 +424,14 @@ docker compose down
    A regra `ServiceDown` entra no estado `pending` e posteriormente `firing` se a parada ultrapassar 1 minuto.
 4. **Recuperar serviço**:
    ```bash
-   docker compose start http-server-projeto-korp
+   docker compose -f /opt/korp/compose.yaml start http-server-projeto-korp
    ```
-   O target retorna ao estado `UP` (`up=1`) e o painel do Grafana volta ao status `ONLINE`.
+   Após o próximo scrape, o target retorna ao estado `UP` (`up=1`) e o painel do
+   Grafana volta ao status `ONLINE`.
+
+   Para uma execução local sem NGINX, substitua `-f /opt/korp/compose.yaml` por
+   `-f compose.yaml` (ou execute os comandos no diretório que contém o Compose
+   usado para subir a stack).
 
 ---
 
