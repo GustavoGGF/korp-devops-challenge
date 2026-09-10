@@ -435,27 +435,7 @@ docker compose down
 
 ---
 
-## 9. Agentes e Skills do Projeto
-
-As instruções locais para agentes ficam em `.agents/`. O ambiente esperado para a evolução do desafio inclui Docker, Docker Compose, Go, Ansible e Git.
- 
-Agentes especializados:
- 
-- `container-agent`: Docker, Docker Compose e redes Docker.
-- `reverse-proxy-agent`: NGINX como proxy reverso.
-- `observability-agent`: Prometheus, Grafana, alertas e provisioning.
-- `infrastructure-agent`: Ansible, Linux/Shell e YAML de infraestrutura.
-- `go-http-agent`: servidores HTTP e APIs em Go.
- 
-Skills disponíveis em `.agents/skills/`:
- 
-`go-http-server`, `docker`, `docker-compose`, `docker-networking`, `nginx-reverse-proxy`, `prometheus`, `grafana`, `observability`, `grafana-provisioning`, `ansible`, `linux-shell` e `yaml-infrastructure`.
-
-As skills de infraestrutura foram criadas localmente após a verificação nominal da página [skills.sh/trending](https://www.skills.sh/trending), que não listava essas áreas no momento da configuração. CI/CD não foi adicionado porque permanece condicional no plano do desafio.
-
----
-
-## 10. Automação de Infraestrutura com Ansible (Parte 3)
+## 9. Automação de Infraestrutura com Ansible (Parte 3)
 
 Toda a plataforma (Docker, aplicação Go, NGINX como proxy reverso, Prometheus e Grafana provisionado) pode ser provisionada e configurada de forma totalmente automatizada, idempotente e reproduzível através do Ansible.
 
@@ -542,7 +522,7 @@ ok: [localhost] => {
 
 ---
 
-## 11. Guia de Testes e Validação Completa
+## 10. Guia de Testes e Validação Completa
 
 Para a lista detalhada de todos os comandos de teste com suas **saídas esperadas reais** (Go, Docker, NGINX, Prometheus, Grafana e Ansible), consulte o guia oficial:
 
